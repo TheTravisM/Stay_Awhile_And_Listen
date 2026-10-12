@@ -86,7 +86,7 @@ cain-reader/
 
 ## Phase 1 — Server with a stub engine (no model yet)
 
-- [ ] **T1.1 Engine interface** — `engines/base.py`
+- [x] **T1.1 Engine interface** — `engines/base.py`
   Define `class Engine(Protocol)` with `name: str` and `def synthesize(self, text: str, speed: float) -> bytes` (returns a complete WAV file as bytes).
   **Verify:** from `server\`, `python -c "from engines.base import Engine"` succeeds.
 
