@@ -94,11 +94,11 @@ cain-reader/
   `StubEngine`: returns a mono 16-bit 22050 Hz WAV (use the stdlib `wave` + `numpy`). A 440 Hz sine tone lasting `0.05 s × len(text)`, capped at 10 s, faded in/out over 10 ms. `name = "stub"`. Ignore `speed`.
   **Verify:** write the bytes to `..\scratch\stub.wav`. **(user)** plays it with the Rule 11 command and confirms a tone is heard.
 
-- [ ] **T1.3 Engine registry** — `engines/__init__.py`
+- [x] **T1.3 Engine registry** — `engines/__init__.py`
   `get_engine(name: str) -> Engine`. Supports `"stub"` now. Raise `ValueError` for unknown names. Read the name from env `CAIN_ENGINE`, default `"stub"`.
   **Verify:** `python -c "from engines import get_engine; print(get_engine('stub').name)"` prints `stub`.
 
-- [ ] **T1.4 FastAPI app** — `app.py`
+- [x] **T1.4 FastAPI app** — `app.py`
   - `GET /health` → `{"ok": true, "engine": <name>, "voice": "cain"}`. It must never wait on the synthesis lock.
   - `POST /tts` with JSON `{"text": str (1–2000 chars), "speed": float 0.5–2.0, default 1.0}` → `Response(content=wav, media_type="audio/wav")`. Return 422 on empty text (pydantic validation). Return 500 with `{"error": "..."}` if the engine raises.
   - Define the `/tts` handler with plain `def` (not `async def`) so FastAPI runs it in a worker thread and `/health` stays responsive.
