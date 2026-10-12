@@ -90,7 +90,7 @@ cain-reader/
   Define `class Engine(Protocol)` with `name: str` and `def synthesize(self, text: str, speed: float) -> bytes` (returns a complete WAV file as bytes).
   **Verify:** from `server\`, `python -c "from engines.base import Engine"` succeeds.
 
-- [ ] **T1.2 Stub engine** — `engines/stub.py`
+- [x] **T1.2 Stub engine** — `engines/stub.py`
   `StubEngine`: returns a mono 16-bit 22050 Hz WAV (use the stdlib `wave` + `numpy`). A 440 Hz sine tone lasting `0.05 s × len(text)`, capped at 10 s, faded in/out over 10 ms. `name = "stub"`. Ignore `speed`.
   **Verify:** write the bytes to `..\scratch\stub.wav`. **(user)** plays it with the Rule 11 command and confirms a tone is heard.
 
