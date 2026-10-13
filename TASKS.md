@@ -126,7 +126,7 @@ cain-reader/
   MV3. `name: "Cain Reader"`, `version: "0.1.0"`, `minimum_chrome_version: "116"`. Permissions: `contextMenus`, `storage`, `offscreen`, `activeTab`, `scripting`. `host_permissions: ["http://127.0.0.1:8765/*"]`. `background: {"service_worker": "background.js", "type": "module"}`. `action: {"default_popup": "popup.html"}`. `commands: {"read-selection": {"suggested_key": {"default": "Alt+Shift+C", "windows": "Alt+Shift+C"}, "description": "Read selected text aloud"}}`. `icons` 16/48/128.
   **Verify:** from `cain-reader\`, `.\server\.venv\Scripts\python.exe -m json.tool extension\manifest.json` succeeds.
 
-- [ ] **T2.2 Placeholder icons**
+- [x] **T2.2 Placeholder icons**
   Generate three solid-colour PNGs (16/48/128) with a small Python script using only the stdlib (`zlib`+`struct`), or Pillow if installed. Save to `extension\icons\` as `icon16.png`, `icon48.png`, `icon128.png`. Delete the script afterwards.
   **Verify:** `Get-ChildItem extension\icons` shows the three files, each larger than 0 bytes, and the manifest `icons` paths match those names.
 
