@@ -152,14 +152,14 @@ cain-reader/
 
 ## Phase 4 — Triggers and selection
 
-- [ ] **T4.1 Content script** — `extension/content.js`
+- [x] **T4.1 Content script** — `extension/content.js`
   Listens for `chrome.runtime.onMessage`:
   - `{type: "GET_SELECTION"}` → respond `{text: window.getSelection().toString()}`.
   - `{type: "TOAST", text, kind}` → show a fixed-position div (bottom-right, dark background, z-index max, auto-removes after 3 s). Use a Shadow DOM so page CSS can't interfere.
   Register it in the manifest via `content_scripts` on `<all_urls>` at `document_idle`.
   **Verify (user):** reload the extension and a page. The page's DevTools console shows no errors from the script.
 
-- [ ] **T4.2 Trigger wiring** — `extension/background.js`
+- [x] **T4.2 Trigger wiring** — `extension/background.js`
   - `chrome.runtime.onInstalled`: create the context menu `{id: "cain-read", title: "Read with Cain", contexts: ["selection"]}`.
   - `contextMenus.onClicked` → use `info.selectionText` → call `startReading(text, tabId)`.
   - `commands.onCommand("read-selection")` → get the active tab and send `GET_SELECTION` inside try/catch. Tabs opened before the extension loaded have no content script, so on failure fall back to `chrome.scripting.executeScript` returning `window.getSelection().toString()`. If that also fails (for example `chrome://` pages), log a warning and stop. If the text is empty, send a TOAST "Select some text first".
