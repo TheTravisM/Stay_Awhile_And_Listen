@@ -136,7 +136,7 @@ cain-reader/
 
 ## Phase 3 — Text handling (pure, testable)
 
-- [ ] **T3.1 Chunker** — `extension/chunker.js`
+- [x] **T3.1 Chunker** — `extension/chunker.js`
   `export function chunkText(raw, {maxChars = 300, firstMaxChars = 120, cap = 5000} = {})` → `{chunks: string[], truncated: boolean}`.
   Rules, in order:
   1. Collapse all whitespace runs to a single space and trim. Empty → `{chunks: [], truncated: false}`.
@@ -146,7 +146,7 @@ cain-reader/
   5. Any single sentence longer than the limit is split at the last space before the limit (hard-cut if there's no space).
   **Verify:** Task T3.2 passes.
 
-- [ ] **T3.2 Chunker tests** — `extension/tests/chunker.test.js`
+- [x] **T3.2 Chunker tests** — `extension/tests/chunker.test.js`
   Use `node:test` + `node:assert`. Cases: empty/whitespace → `[]`; one short sentence → 1 chunk; first chunk ≤ 120 and the rest ≤ 300 on long text; a 400-char sentence with no punctuation is split into pieces ≤ the limit; 6000-char input → `truncated: true` and total length ≤ 5000; joined chunks contain no lost words.
   **Verify:** `node --test extension/tests/chunker.test.js` → all pass. (Naming the file avoids Windows directory-glob problems.)
 
