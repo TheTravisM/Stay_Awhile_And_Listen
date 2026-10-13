@@ -112,17 +112,17 @@ cain-reader/
   ```
   `/health` returns `ok:true` and `out.wav` starts with `RIFF`. **(user)** plays `out.wav` and confirms a tone.
 
-- [ ] **T1.5 Server tests** — `tests/test_app.py`
+- [x] **T1.5 Server tests** — `tests/test_app.py`
   Using `fastapi.testclient.TestClient`: health returns ok; `/tts` returns 200, `audio/wav`, and bytes starting with `RIFF`; empty text returns 422.
   **Verify:** from `server\`, `python -m pytest -q` → all pass.
 
-- [ ] **T1.6 Run script** — `run.ps1`
+- [x] **T1.6 Run script** — `run.ps1`
   Does `Set-Location $PSScriptRoot`, then runs `& "$PSScriptRoot\.venv\Scripts\python.exe" -m uvicorn app:app --host 127.0.0.1 --port 8765`. No venv activation. It must work when launched from any directory. If PowerShell blocks the script, the user runs once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
   **Verify:** `.\run.ps1` starts and `curl.exe -s localhost:8765/health` responds.
 
 ## Phase 2 — Extension skeleton
 
-- [ ] **T2.1 Manifest** — `extension/manifest.json`
+- [x] **T2.1 Manifest** — `extension/manifest.json`
   MV3. `name: "Cain Reader"`, `version: "0.1.0"`, `minimum_chrome_version: "116"`. Permissions: `contextMenus`, `storage`, `offscreen`, `activeTab`, `scripting`. `host_permissions: ["http://127.0.0.1:8765/*"]`. `background: {"service_worker": "background.js", "type": "module"}`. `action: {"default_popup": "popup.html"}`. `commands: {"read-selection": {"suggested_key": {"default": "Alt+Shift+C", "windows": "Alt+Shift+C"}, "description": "Read selected text aloud"}}`. `icons` 16/48/128.
   **Verify:** from `cain-reader\`, `.\server\.venv\Scripts\python.exe -m json.tool extension\manifest.json` succeeds.
 
