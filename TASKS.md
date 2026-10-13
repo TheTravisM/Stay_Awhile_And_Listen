@@ -123,7 +123,7 @@ cain-reader/
 ## Phase 2 — Extension skeleton
 
 - [x] **T2.1 Manifest** — `extension/manifest.json`
-  MV3. `name: "Cain Reader"`, `version: "0.1.0"`, `minimum_chrome_version: "116"`. Permissions: `contextMenus`, `storage`, `offscreen`, `activeTab`, `scripting`. `host_permissions: ["http://127.0.0.1:8765/*"]`. `background: {"service_worker": "background.js", "type": "module"}`. `action: {"default_popup": "popup.html"}`. `commands: {"read-selection": {"suggested_key": {"default": "Alt+Shift+C", "windows": "Alt+Shift+C"}, "description": "Read selected text aloud"}}`. `icons` 16/48/128.
+  MV3. `name: "Cain Reader"`, `version: "0.1.0"`, `minimum_chrome_version: "116"`. Permissions: `contextMenus`, `storage`, `offscreen`, `activeTab`, `scripting`. `host_permissions: ["http://127.0.0.1:8765/*"]`. `background: {"service_worker": "background.js", "type": "module"}`. `action: {"default_popup": "popup.html"}`. `commands: {"read-selection": {"suggested_key": {"default": "Ctrl+Shift+S", "windows": "Ctrl+Shift+S"}, "description": "Read selected text aloud"}}`. `icons` 16/48/128.
   **Verify:** from `cain-reader\`, `.\server\.venv\Scripts\python.exe -m json.tool extension\manifest.json` succeeds.
 
 - [x] **T2.2 Placeholder icons**
@@ -164,7 +164,7 @@ cain-reader/
   - `contextMenus.onClicked` → use `info.selectionText` → call `startReading(text, tabId)`.
   - `commands.onCommand("read-selection")` → get the active tab and send `GET_SELECTION` inside try/catch. Tabs opened before the extension loaded have no content script, so on failure fall back to `chrome.scripting.executeScript` returning `window.getSelection().toString()`. If that also fails (for example `chrome://` pages), log a warning and stop. If the text is empty, send a TOAST "Select some text first".
   - Stub `startReading` for now: `console.log(chunkText(text))`.
-  **Verify (user):** select text, press Alt+Shift+C, and see the chunks logged in the service worker console (`chrome://extensions` → "service worker" link). If the shortcut does nothing, check `chrome://extensions/shortcuts` for a conflict.
+  **Verify (user):** select text, press Ctrl+Shift+S, and see the chunks logged in the service worker console (`chrome://extensions` → "service worker" link). If the shortcut does nothing, check `chrome://extensions/shortcuts` for a conflict.
 
 ## Phase 5 — Synthesis + playback
 
@@ -188,7 +188,7 @@ cain-reader/
   6. After the last chunk, send `DONE_SENDING`.
   7. On fetch failure: toast "Cain server offline — run server\run.ps1" (network error) or "TTS error" (HTTP ≥ 400), send `STOP` to offscreen, set `active = false`. Ignore `AbortError` (it comes from Stop).
   `speed` comes from `chrome.storage.sync` (default 1.0) and is applied by the **server**. Don't use `playbackRate`.
-  **Verify (user):** with the stub server running, select a long paragraph on any https page and press Alt+Shift+C. Tones play in order and the first starts quickly. The user reports.
+  **Verify (user):** with the stub server running, select a long paragraph on any https page and press Ctrl+Shift+S. Tones play in order and the first starts quickly. The user reports.
 
 - [ ] **T5.3 Toggle + stop** — `background.js`
   Keep `active` (a read is in progress, from trigger until playback ends, stops, or errors) in `chrome.storage.session`, so it survives the service worker sleeping. Set it false on `PLAYBACK_STATE {playing:false}`. The command handler: if `active` → `stopReading()`, otherwise read. `stopReading()` aborts requests, bumps `runId`, sends `STOP` to offscreen and sets `active = false`. `STOP` messages from the popup call `stopReading()`.
@@ -243,7 +243,7 @@ cain-reader/
 ## Phase 9 — Docs
 
 - [ ] **T9.1 README.md**
-  Sections: What it is; Requirements (Windows 10/11, Python 3.12, Chrome, optional NVIDIA GPU); Setup (venv, install, put `cain.wav`/`cain.txt` in `server\voices\`); Run the server (`.\run.ps1`); Load the extension (steps from T2.3); Usage (context menu, Alt+Shift+C, popup); Offline use (the model downloads once; afterwards set `HF_HUB_OFFLINE=1` before running the server); Troubleshooting (offline toast, no audio, slow first sentence, PowerShell execution policy, shortcut conflicts); Legal note: personal use, bring your own reference clip, no Blizzard audio is shipped.
+  Sections: What it is; Requirements (Windows 10/11, Python 3.12, Chrome, optional NVIDIA GPU); Setup (venv, install, put `cain.wav`/`cain.txt` in `server\voices\`); Run the server (`.\run.ps1`); Load the extension (steps from T2.3); Usage (context menu, Ctrl+Shift+S, popup); Offline use (the model downloads once; afterwards set `HF_HUB_OFFLINE=1` before running the server); Troubleshooting (offline toast, no audio, slow first sentence, PowerShell execution policy, shortcut conflicts); Legal note: personal use, bring your own reference clip, no Blizzard audio is shipped.
   **Verify:** a fresh reader can follow it from a clean checkout to hearing audio.
 
 ## Phase 10 — Text cleanup (after v1 passes final acceptance)
@@ -261,7 +261,7 @@ cain-reader/
 
 - [ ] **T10.2 Wire it in** — `extension/background.js`
   In `startReading`, call `cleanText(text)` **before** `chunkText`. If the result is empty, toast "Nothing to read" and return.
-  **Verify (user):** select text containing a URL and `[3]` on a page and press Alt+Shift+C. The URL and citation aren't spoken.
+  **Verify (user):** select text containing a URL and `[3]` on a page and press Ctrl+Shift+S. The URL and citation aren't spoken.
 
 ---
 
@@ -270,7 +270,7 @@ cain-reader/
 - [ ] `python -m pytest -q` passes (server, run from `server\`).
 - [ ] `node --test extension/tests/chunker.test.js` passes.
 - [ ] Extension loads with zero errors. (user)
-- [ ] Select → Alt+Shift+C → Cain's voice within ~3 s, in order, on an https page. (user)
+- [ ] Select → Ctrl+Shift+S → Cain's voice within ~3 s, in order, on an https page. (user)
 - [ ] Shortcut again stops in < 0.5 s. (user)
 - [ ] Offline server → toast + red popup dot. (user)
 - [ ] 5,000-char read completes. (user)

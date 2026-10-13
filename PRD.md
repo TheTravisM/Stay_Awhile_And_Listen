@@ -20,7 +20,7 @@ Reading long web text is tedious and the default browser TTS is robotic. The goa
 
 Single user (the author), on their own Windows PC.
 1. Select a paragraph, right-click, **Read with Cain**.
-2. Select text, press **Alt+Shift+C**, and it reads.
+2. Select text, press **Ctrl+Shift+S**, and it reads.
 3. Press the same shortcut again, or click Stop in the popup, and it stops.
 4. Open the popup to see server status, change speed, and stop playback.
 
@@ -47,7 +47,7 @@ Single user (the author), on their own Windows PC.
 | ID | Requirement |
 |----|-------------|
 | F1 | Context menu "Read with Cain" appears only when text is selected. |
-| F2 | Command `read-selection` (default Alt+Shift+C) reads the current selection. If audio is already playing, it stops instead (toggle). |
+| F2 | Command `read-selection` (default Ctrl+Shift+S) reads the current selection. If audio is already playing, it stops instead (toggle). |
 | F3 | Selected text is trimmed, whitespace-collapsed, and capped at 5,000 chars (extra is dropped, with a toast saying so). |
 | F4 | Text is split into sentence chunks of ≤ 300 chars. |
 | F5 | Chunks are requested from the server in order. Chunk N+1 is prefetched while chunk N plays. |
@@ -114,7 +114,7 @@ All commands are PowerShell. Use `curl.exe`, not `curl`.
 2. With `scratch/body.json` containing `{"text":"Stay awhile and listen."}`, this produces a playable WAV:
    `curl.exe -X POST localhost:8765/tts -H "content-type: application/json" -d "@scratch/body.json" -o scratch/out.wav`
 3. Extension loads unpacked in Chrome with zero errors on `chrome://extensions`.
-4. On a normal HTTPS page, selecting a paragraph and pressing Alt+Shift+C plays it in order, with first audio ≤ 3 s.
+4. On a normal HTTPS page, selecting a paragraph and pressing Ctrl+Shift+S plays it in order, with first audio ≤ 3 s.
 5. Pressing the shortcut again stops audio within 0.5 s.
 6. With the server stopped, a trigger shows an "offline" toast and the popup dot is red.
 7. A 5,000-char selection plays fully without the service worker dying mid-read.
