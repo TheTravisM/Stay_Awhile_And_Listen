@@ -130,7 +130,7 @@ cain-reader/
   Generate three solid-colour PNGs (16/48/128) with a small Python script using only the stdlib (`zlib`+`struct`), or Pillow if installed. Save to `extension\icons\` as `icon16.png`, `icon48.png`, `icon128.png`. Delete the script afterwards.
   **Verify:** `Get-ChildItem extension\icons` shows the three files, each larger than 0 bytes, and the manifest `icons` paths match those names.
 
-- [ ] **T2.3 Load check**
+- [x] **T2.3 Load check**
   Create a minimal `background.js` (`console.log('cain: up')`) and a minimal `popup.html`.
   **Verify (user):** in Chrome, `chrome://extensions` → Developer mode → Load unpacked → select the `extension` folder. The card shows no "Errors" button. The user reports the result.
 
