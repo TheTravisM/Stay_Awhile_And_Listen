@@ -171,14 +171,14 @@ cain-reader/
 **Message types (use exactly):** `PLAY_CHUNK` (background → offscreen), `DONE_SENDING` (background → offscreen), `STOP` (popup or background → offscreen and background), `PLAYBACK_STATE` (offscreen → background), plus `GET_SELECTION` and `TOAST` from Phase 4. There is no `SET_RATE`.
 **Every message carries `target`:** `"offscreen"` or `"background"`. A handler ignores any message not addressed to it.
 
-- [ ] **T5.1 Offscreen document** — `offscreen.html` + `offscreen.js`
+- [x] **T5.1 Offscreen document** — `offscreen.html` + `offscreen.js`
   `offscreen.js` holds a queue and an `Audio` element.
   - On `{target:"offscreen", type: "PLAY_CHUNK", index, wav: base64 string}`: decode to a Blob (`audio/wav`), `URL.createObjectURL`, push to the queue. Start playing if idle.
   - On `ended`: revoke the URL, play the next in the queue. When the queue is empty **and** `DONE_SENDING` has been received → send `PLAYBACK_STATE {playing:false}`.
   - On `STOP`: pause, clear the queue, revoke URLs, send `PLAYBACK_STATE {playing:false}`.
   **Verify (user):** from the service worker console, create the offscreen doc and send it a base64 WAV (the builder supplies a ready-to-paste snippet using the stub WAV). The user hears the tone and reports.
 
-- [ ] **T5.2 Background pipeline** — `background.js`
+- [x] **T5.2 Background pipeline** — `background.js`
   Implement `startReading(text, tabId)`:
   1. Stop any current read (abort via `AbortController`, send `STOP` to offscreen). Bump a `runId`. Set `active = true`.
   2. `chunkText(text)`. If empty, toast and return. If truncated, toast "Reading first 5,000 characters".
