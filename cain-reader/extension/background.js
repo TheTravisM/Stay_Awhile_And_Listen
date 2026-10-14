@@ -2,8 +2,12 @@ import { chunkText } from "./chunker.js";
 
 // storage.sync key for speech rate; the server applies it.
 const SPEED_KEY = "speed";
+// storage.session key for "a read is in progress"; survives the SW sleeping.
+const ACTIVE_KEY = "active";
 const TTS_URL = "http://127.0.0.1:8765/tts";
 
+// In-memory mirror of the persisted "active" flag; storage.session is the
+// source of truth so the toggle survives the service worker sleeping.
 let active = false;
 let runId = 0;
 let currentController = null;
@@ -51,6 +55,36 @@ async function getSpeed() {
     /* storage unavailable */
   }
   return 1.0;
+}
+
+// Stop the current read: abort fetches, invalidate runs, halt playback.
+async function stopReading() {
+  runId++;
+  if (currentController) {
+    currentController.abort();
+    currentController = null;
+  }
+  await sendOffscreen({ target: "offscreen", type: "STOP" });
+  await setActive(false);
+}
+
+// Persist the read-in-progress flag so it survives the service worker
+// sleeping; the in-memory variable is just a cached mirror.
+async function setActive(value) {
+  active = value;
+  try {
+    await chrome.storage.session.set({ [ACTIVE_KEY]: value });
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+async function restoreActive() {
+  try {
+    active = !!(await chrome.storage.session.get(ACTIVE_KEY))[ACTIVE_KEY];
+  } catch {
+    active = false;
+  }
 }
 
 // Bounded slices; never spread a large array into String.fromCharCode.
@@ -104,8 +138,9 @@ async function startReading(text, tabId) {
   const signal = currentController.signal;
   runId++;
   const myRun = runId;
-  active = true;
+  await setActive(true);
   await sendOffscreen({ target: "offscreen", type: "STOP" });
+  if (myRun !== runId) return;
 
   // 2. chunk
   const { chunks, truncated } = chunkText(text);
@@ -148,7 +183,7 @@ async function startReading(text, tabId) {
         "error"
       );
       await sendOffscreen({ target: "offscreen", type: "STOP" });
-      active = false;
+      await setActive(false);
       return;
     }
     if (myRun !== runId) return;
@@ -189,12 +224,28 @@ async function readSelection(tabId) {
   }
 }
 
+restoreActive();
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "cain-read",
     title: "Read with Cain",
     contexts: ["selection"],
   });
+});
+
+chrome.runtime.onMessage.addListener((msg) => {
+  if (!msg || msg.target !== "background") return;
+  if (msg.type === "STOP") {
+    stopReading();
+    return;
+  }
+  if (msg.type === "PLAYBACK_STATE" && !msg.playing && !msg.stopped) {
+    // msg.stopped marks the reply to a STOP that stopReading/startReading
+    // sent; they already set active themselves.
+    setActive(false);
+    return;
+  }
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
@@ -204,6 +255,13 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
 chrome.commands.onCommand.addListener(async (command) => {
   if (command !== "read-selection") return;
+
+  // Toggle: if a read is in progress, stop it; otherwise read the selection.
+  if (active) {
+    void stopReading();
+    return;
+  }
+
   const [tab] = await chrome.tabs.query({
     active: true,
     lastFocusedWindow: true,

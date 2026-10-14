@@ -190,7 +190,7 @@ cain-reader/
   `speed` comes from `chrome.storage.sync` (default 1.0) and is applied by the **server**. Don't use `playbackRate`.
   **Verify (user):** with the stub server running, select a long paragraph on any https page and press Ctrl+Shift+S. Tones play in order and the first starts quickly. The user reports.
 
-- [ ] **T5.3 Toggle + stop** — `background.js`
+- [x] **T5.3 Toggle + stop** — `background.js`
   Keep `active` (a read is in progress, from trigger until playback ends, stops, or errors) in `chrome.storage.session`, so it survives the service worker sleeping. Set it false on `PLAYBACK_STATE {playing:false}`. The command handler: if `active` → `stopReading()`, otherwise read. `stopReading()` aborts requests, bumps `runId`, sends `STOP` to offscreen and sets `active = false`. `STOP` messages from the popup call `stopReading()`.
   **Verify (user):** press the shortcut during playback and audio stops in under 0.5 s with no more chunks fetched (the server log shows no further requests).
 

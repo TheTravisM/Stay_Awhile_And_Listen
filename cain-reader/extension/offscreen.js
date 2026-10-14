@@ -14,9 +14,11 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === "STOP") return onStop();
 });
 
-function sendState(playing) {
+function sendState(playing, stopped = false) {
+  const message = { target: "background", type: "PLAYBACK_STATE", playing };
+  if (stopped) message.stopped = true;
   chrome.runtime
-    .sendMessage({ target: "background", type: "PLAYBACK_STATE", playing })
+    .sendMessage(message)
     .catch(() => { /* no listener has responded yet */ });
 }
 
@@ -66,5 +68,5 @@ function onStop() {
   for (const item of queue) URL.revokeObjectURL(item.url);
   queue.length = 0;
   doneSending = false;
-  sendState(false);
+  sendState(false, true);
 }
