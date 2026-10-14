@@ -1,3 +1,5 @@
+addEventListener("error", (e) => console.error("offscreen error:", e.message, e.filename, e.lineno));
+
 const queue = [];
 let current = null;
 let doneSending = false;
@@ -15,7 +17,7 @@ chrome.runtime.onMessage.addListener((msg) => {
 function sendState(playing) {
   chrome.runtime
     .sendMessage({ target: "background", type: "PLAYBACK_STATE", playing })
-    .catch(() => {});
+    .catch(() => { /* no listener has responded yet */ });
 }
 
 function base64ToBlob(b64) {
@@ -28,7 +30,7 @@ function base64ToBlob(b64) {
 function start(item) {
   current = item;
   audio.src = item.url;
-  audio.play().catch(() => {});
+  audio.play().catch((err) => console.error("offscreen play failed:", err));
 }
 
 function playNext() {

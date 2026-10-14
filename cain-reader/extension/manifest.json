@@ -30,8 +30,8 @@
   "commands": {
     "read-selection": {
       "suggested_key": {
-        "default": "Ctrl+Shift+C",
-        "windows": "Ctrl+Shift+C"
+        "default": "Ctrl+Shift+S",
+        "windows": "Ctrl+Shift+S"
       },
       "description": "Read selected text aloud"
     }
