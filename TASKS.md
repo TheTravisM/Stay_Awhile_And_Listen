@@ -196,7 +196,7 @@ cain-reader/
 
 ## Phase 6 — Popup
 
-- [ ] **T6.1 Popup UI** — `popup.html`, `popup.js`, `popup.css`
+- [x] **T6.1 Popup UI** — `popup.html`, `popup.js`, `popup.css`
   Elements: title "Cain Reader"; a status dot + text (green "Server online (<engine>)" / red "Server offline"); a speed slider 0.8–1.4 step 0.05 with a value label; a **Stop** button.
   - On open, `fetch /health` (2 s timeout) to set the dot.
   - Speed is saved to `chrome.storage.sync` as `speed` on `input`.
