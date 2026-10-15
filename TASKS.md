@@ -206,7 +206,7 @@ cain-reader/
 
 ## Phase 7 — Real voice (GPU steps: see Rule 13)
 
-- [ ] **T7.1 Voice assets (user action — builder: stop and ask)**
+- [x] **T7.1 Voice assets (user action — builder: stop and ask)**
   Confirm `server\voices\cain.wav` (10–30 s, mono, ≥16 kHz) and `cain.txt` (exact transcript) exist. Check only that the two files are there. If not, write "WAITING ON USER: reference clip" in `NOTES.md` and **don't proceed to T7.2**.
   **Verify (user):** `Get-ChildItem server\voices` shows both, and the clip plays clean using the Rule 11 command.
 
