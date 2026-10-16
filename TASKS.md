@@ -210,11 +210,12 @@ cain-reader/
   Confirm `server\voices\cain.wav` (10–30 s, mono, ≥16 kHz) and `cain.txt` (exact transcript) exist. Check only that the two files are there. If not, write "WAITING ON USER: reference clip" in `NOTES.md` and **don't proceed to T7.2**.
   **Verify (user):** `Get-ChildItem server\voices` shows both, and the clip plays clean using the Rule 11 command.
 
-- [ ] **T7.2 Engine probe**
+- [x] **T7.2 Engine probe**
   The builder has no web access, so before installing, stop and ask the user for two things: (a) the exact PyTorch install command from the pytorch.org selector (Windows, Pip, Python 3.12, CUDA), and (b) the usage / voice-clone section of the Qwen3-TTS README pasted into `NOTES.md` (just that section, to save context). Don't guess either.
   Then, with `| Select-Object -Last 20` on every install: install PyTorch, then the primary engine per its README (**Qwen3-TTS voice-clone**, see PRD §8). Write a throwaway `server\probe_tts.py` (not part of the final tree) that generates one sentence using `cain.wav` + `cain.txt` to `..\scratch\probe.wav` and prints the elapsed seconds and device.
   **Verify (user, GPU):** the user stops Ollama, runs `python probe_tts.py` from `server\`, plays `probe.wav`, and pastes the output. Record in `NOTES.md`: package name, version, device (CUDA/CPU), seconds for a ~15-word sentence, and the exact API call that worked.
   Installs on Windows can fail (missing C++ build tools, unsupported Python version). If the install fails or generation is slower than 8 s per sentence, record the last ~20 lines of the error and repeat with **XTTS-v2**, then **F5-TTS**. The result must be intelligible speech in a voice resembling the reference.
+  **Verify result (recorded 2026-10-16, user):** probe audio ("sounds great", resembles the intended Cain voice) confirmed by listening; elapsed generation **18.20 s** is user-provided console output (not builder-verified). Full evidence in `cain-reader\NOTES.md` (T7.2 block).
 
 - [ ] **T7.3 Cain engine** — `engines/cain.py`
   Implement `CainEngine(Engine)` using the API proven in T7.2. Load the model **once** in `__init__`. `synthesize` runs the model with the cached reference, maps `speed` to the model's rate parameter (or time-stretches if there's none), and returns **16-bit PCM mono WAV bytes** (convert float output if needed). Add `"cain"` to `get_engine`. Add the new deps to `requirements.txt`.

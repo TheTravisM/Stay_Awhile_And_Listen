@@ -8,8 +8,16 @@ _ENGINES = {
 }
 
 
+def _engine_class(name: str):
+    if name == "cain":
+        from .cain import CainEngine
+
+        return CainEngine
+    return _ENGINES.get(name)
+
+
 def get_engine(name: str = os.environ.get("CAIN_ENGINE", "stub")) -> Engine:
-    try:
-        return _ENGINES[name]()
-    except KeyError:
-        raise ValueError(f"unknown engine: {name!r}") from None
+    cls = _engine_class(name)
+    if cls is None:
+        raise ValueError(f"unknown engine: {name!r}")
+    return cls()

@@ -3,3 +3,10 @@ uvicorn
 numpy
 pytest
 httpx
+
+# Qwen3-TTS voice-clone engine (pulls in librosa, torchaudio, transformers,
+# soundfile, accelerate, and the rest on install).
+# PyTorch is NOT listed here: install it first from pytorch.org (Windows, CUDA
+# 13.2) using the exact command in server/NOTES.md section 1, or pip will
+# replace the working CUDA build.
+qwen-tts
