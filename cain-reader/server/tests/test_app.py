@@ -24,3 +24,13 @@ def test_tts_returns_wav():
 def test_tts_empty_text_422():
     r = client.post("/tts", json={"text": ""})
     assert r.status_code == 422
+
+
+def test_tts_unicode_not_422():
+    # Emoji, curly quotes and newlines must pass validation, not 422.
+    # This exercises the stub engine (no GPU); the real engine's behavior with
+    # these characters still needs manual verification.
+    text = "Emoji 😀 “curly quotes” and\nnew line\ttab."
+    r = client.post("/tts", json={"text": text})
+    assert r.status_code == 200
+    assert r.content[:4] == b"RIFF"

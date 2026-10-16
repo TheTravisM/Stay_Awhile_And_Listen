@@ -37,7 +37,7 @@ function splitToFits(sentence, limit) {
   return pieces.filter(Boolean);
 }
 
-export function chunkText(raw, { maxChars = 300, firstMaxChars = 120, cap = 5000 } = {}) {
+export function chunkText(raw, { maxChars = 300, firstMaxChars = 80, cap = 5000 } = {}) {
   const text = String(raw).replace(/\s+/g, ' ').trim();
   if (!text) return { chunks: [], truncated: false };
 

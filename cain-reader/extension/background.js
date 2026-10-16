@@ -109,6 +109,15 @@ async function fetchChunk(i, chunks, signal, speed) {
   return arrayBufferToBase64(await res.arrayBuffer());
 }
 
+// Start a chunk fetch but mark it handled. A run can exit (abort or a newer
+// read) before awaiting a lookahead fetch, and an unhandled rejection there
+// would show up as a service-worker console error on every failed read.
+function prefetch(i, chunks, signal, speed) {
+  const p = fetchChunk(i, chunks, signal, speed);
+  p.catch(() => {});
+  return p;
+}
+
 async function ensureOffscreen() {
   try {
     const ctxs = await chrome.runtime.getContexts({
@@ -119,13 +128,19 @@ async function ensureOffscreen() {
     /* getContexts unavailable; fall through to create */
   }
   if (!offscreenPromise) {
-    offscreenPromise = chrome.offscreen.createDocument({
+    const creation = chrome.offscreen.createDocument({
       url: "offscreen.html",
       reasons: ["AUDIO_PLAYBACK"],
       justification: "Play synthesized speech",
     });
-    offscreenPromise.catch(() => {
-      offscreenPromise = null;
+    offscreenPromise = creation;
+    // Hold the promise only while creation is in flight. Once it settles the
+    // cache must clear: Chrome closes an AUDIO_PLAYBACK offscreen document
+    // ~30 s after it goes silent, so a stale resolved promise would make the
+    // next read skip recreating it (getContexts() returns empty) and silently
+    // drop its PLAY_CHUNK — first read plays, later reads are mute.
+    creation.catch(() => {}).finally(() => {
+      if (offscreenPromise === creation) offscreenPromise = null;
     });
   }
   await offscreenPromise;
@@ -145,28 +160,20 @@ async function startReading(text, tabId) {
   // 2. chunk
   const { chunks, truncated } = chunkText(text);
   if (!chunks.length) {
-    toast(tabId, "Select Some Text And Listen");
+    toast(tabId, "Select some text first");
     return;
   }
   if (truncated) toast(tabId, "Reading first 5,000 characters", "warn");
 
-  // 3. offscreen doc
-  try {
-    await ensureOffscreen();
-  } catch (err) {
-    console.warn("cain: offscreen unavailable:", err);
-    return;
-  }
-  if (myRun !== runId) return;
-
-  // 4. fetch sequentially with one-chunk lookahead (max 2 in flight)
+  // 3. fetch chunks sequentially with one-chunk lookahead (max 2 in flight)
   const last = chunks.length - 1;
   const speed = await getSpeed();
   if (myRun !== runId) return;
 
   let index = 0;
-  let current = fetchChunk(0, chunks, signal, speed);
-  let pending = last >= 1 ? fetchChunk(1, chunks, signal, speed) : null;
+  let current = prefetch(0, chunks, signal, speed);
+  let pending = last >= 1 ? prefetch(1, chunks, signal, speed) : null;
+  let offscreenReady = false;
 
   while (index <= last) {
     if (myRun !== runId) return;
@@ -187,6 +194,24 @@ async function startReading(text, tabId) {
       return;
     }
     if (myRun !== runId) return;
+
+    // 4. Create the offscreen document only when the first chunk is ready to
+    // play. Chrome force-closes an AUDIO_PLAYBACK offscreen document 30 s
+    // after creation if it has not started playing; creating it before the
+    // (slow) first synthesis can make Chrome close it before any audio
+    // arrives, silently dropping the PLAY_CHUNK.
+    if (!offscreenReady) {
+      try {
+        await ensureOffscreen();
+      } catch (err) {
+        console.warn("cain: offscreen unavailable:", err);
+        await setActive(false);
+        return;
+      }
+      if (myRun !== runId) return;
+      offscreenReady = true;
+    }
+
     await sendOffscreen({
       target: "offscreen",
       type: "PLAY_CHUNK",
@@ -198,7 +223,7 @@ async function startReading(text, tabId) {
     current = pending;
     pending = null;
     if (index + 1 <= last) {
-      pending = fetchChunk(index + 1, chunks, signal, speed);
+      pending = prefetch(index + 1, chunks, signal, speed);
     }
   }
 
@@ -274,7 +299,7 @@ chrome.commands.onCommand.addListener(async (command) => {
     return;
   }
   if (!text.trim()) {
-    toast(tab.id, "Select Some Text And Listen");
+    toast(tab.id, "Select some text first");
     return;
   }
   startReading(text, tab.id);

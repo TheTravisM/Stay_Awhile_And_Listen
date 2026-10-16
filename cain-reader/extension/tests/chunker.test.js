@@ -13,13 +13,13 @@ test('one short sentence becomes a single chunk', () => {
   assert.deepStrictEqual(chunks, ['Stay awhile and listen.']);
 });
 
-test('first chunk stays under 120 and the rest under 300', () => {
+test('first chunk stays under 80 and the rest under 300', () => {
   const sentence = 'The quick brown fox jumps over the lazy dog. ';
   const raw = sentence.repeat(20); // ~1600 chars, no truncation
-  const { chunks, truncated } = chunkText(raw, { maxChars: 300, firstMaxChars: 120 });
+  const { chunks, truncated } = chunkText(raw, { maxChars: 300 });
   assert.strictEqual(truncated, false);
   assert.ok(chunks.length > 1, 'expected several chunks');
-  assert.ok(chunks[0].length <= 120, `first chunk ${chunks[0].length} > 120`);
+  assert.ok(chunks[0].length <= 80, `first chunk ${chunks[0].length} > 80`);
   for (const c of chunks.slice(1)) {
     assert.ok(c.length <= 300, `chunk ${c.length} > 300`);
   }
@@ -57,4 +57,28 @@ test('joined chunks lose no words', () => {
   const { chunks } = chunkText(raw);
   const joined = chunks.join(' ');
   assert.strictEqual(joined, normalized);
+});
+
+test('emoji, quotes and newlines round-trip without losing words', () => {
+  // T8.2: emoji, straight/curly quotes, newlines and tabs must not crash
+  // chunkText or drop or mangle any words.
+  const raw =
+    'Stay 😊 "here" and \u2018here\u2019 \n \u201cexactly\u201d like this.\n' +
+    'Second line with a tab\tand a robot 🤖 in it?';
+  const normalized = raw.replace(/\s+/g, ' ').trim();
+  const { chunks, truncated } = chunkText(raw);
+  assert.strictEqual(truncated, false);
+  assert.ok(chunks.length >= 1, 'expected at least one chunk');
+  assert.strictEqual(chunks.join(' '), normalized);
+});
+
+test('emoji, curly quotes and newlines survive chunking', () => {
+  const raw = 'Line one 😀\n\nLine two “quoted” and it’s fine.\n\tThird line 🔥🔥';
+  const normalized = raw.replace(/\s+/g, ' ').trim();
+  const { chunks, truncated } = chunkText(raw);
+  assert.strictEqual(truncated, false);
+  assert.strictEqual(chunks.join(' '), normalized);
+  for (const c of chunks) {
+    assert.ok(!/[\n\r\t]/.test(c), 'newlines/tabs should be collapsed');
+  }
 });

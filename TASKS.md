@@ -221,16 +221,18 @@ cain-reader/
   Implement `CainEngine(Engine)` using the API proven in T7.2. Load the model **once** in `__init__`. `synthesize` runs the model with the cached reference, maps `speed` to the model's rate parameter (or time-stretches if there's none), and returns **16-bit PCM mono WAV bytes** (convert float output if needed). Add `"cain"` to `get_engine`. Add the new deps to `requirements.txt`.
   **Verify (user, GPU):** with Ollama stopped, from `server\`: `$env:CAIN_ENGINE="cain"; .\run.ps1`. In a second terminal, run the `/tts` curl from T1.4 and play the result. `curl.exe -s localhost:8765/health` shows `"engine":"cain"`. Stop the server before resuming Qwen.
 
-- [ ] **T7.4 Latency check**
+- [x] **T7.4 Latency check**
   The builder creates `..\scratch\body100.json` (a ~100-char sentence) and `..\scratch\body300.json` (~300 chars), and writes out these commands for the user:
   `curl.exe -s -o NUL -w "%{time_total}" -X POST localhost:8765/tts -H "content-type: application/json" -d "@../scratch/body100.json"` (and the same for `body300.json`).
   **Verify (user, GPU):** the user runs them with the Cain server up and pastes the times. Record them in `NOTES.md`. If the 100-char time is > 3 s, lower `firstMaxChars` in `chunker.js` to 80 and re-run `node --test extension/tests/chunker.test.js`. The first-chunk time is ≤ 3 s, or the NOTES entry explains the gap.
+  **Verify result (recorded 2026-10-16, user):** 100-char request = 21.096710 s (> 3 s); 300-char time not yet confirmed. `firstMaxChars` lowered to 80 in `chunker.js` (user change) and `chunker.test.js` updated to assert first chunk ≤ 80 / rest ≤ 300; `node --test extension/tests/chunker.test.js` → 6/6 pass. 3-second first-chunk target NOT met; gap explained in `cain-reader\NOTES.md` (latency is per-sentence, ~18–21 s/sentence Qwen3-TTS on RTX 3090), satisfying T7.4's alternate criterion.
 
 ## Phase 8 — Hardening
 
-- [ ] **T8.1 Server keep-warm**
+- [x] **T8.1 Server keep-warm**
   On startup, the Cain engine synthesizes one throwaway short sentence so the first real request isn't slow.
   **Verify (user, GPU):** the first `/tts` after a restart takes within 1.5× the time of the second.
+  **Verify result (recorded 2026-10-16, user):** first 100-char request 22.918612 s, second 20.077004 s, ratio 1.14× (≤ 1.5× → PASS). See `cain-reader\NOTES.md` T8.1 block.
 
 - [ ] **T8.2 Edge cases (manual checklist; fix anything failing)**
   - Select nothing + shortcut → toast "Select some text first".
@@ -239,7 +241,9 @@ cain-reader/
   - Trigger again mid-read → the old read stops, the new one starts, no overlapping audio.
   - Text with emoji, quotes and newlines → no 422 or crash. If something breaks, make the smallest fix in `chunkText`. Full cleanup comes in Phase 10.
   - A page inside an iframe or `chrome://` → the context-menu path still works with `info.selectionText`, and the shortcut logs a warning rather than throwing.
-  **Verify (user):** each line checked off in `NOTES.md`.
+  **Builder inspection (2026-10-16):** inspected `background.js`, `offscreen.js`, `content.js`, `chunker.js`, `popup.js`, `manifest.json`, `server/app.py`, engine + tests. Two confirmed failures fixed with the smallest safe change, both in `background.js`: (1) the empty-selection toast said "Select Some Text And Listen" instead of the spec's "Select some text first"; (2) the one-chunk-lookahead fetch could reject unhandled when a run exits early (offline server or a newer read), surfacing an avoidable service-worker console error — added a `prefetch()` helper that marks those promises handled. No `chunkText` change: emoji/quotes/newlines verified fine at the pure-function level (new tests pass) and emoji cleanup is Phase 10 scope. Did not move the fetch loop to `offscreen.js` (no confirmed SW death). Tests: `node --test extension/tests/chunker.test.js` → 7/7 pass; `python -m pytest -q` (from `server\`) → 4 passed.
+  **Verify (user):** each line checked off in `NOTES.md`. NOT yet verified; all six lines require the user's own browser run.
+  **Blocker (2026-10-16):** core Cain playback had a confirmed defect — the offscreen document was created before the slow (~20-23 s) first synthesis, and Chrome closes an `AUDIO_PLAYBACK` offscreen document 30 s after creation if it has not started playing. Fixed in `background.js` (create the offscreen document lazily, right before the first `PLAY_CHUNK`). Basic end-to-end Cain playback must be re-verified before the six edge-case checks run. Details and diagnostics in `cain-reader/NOTES.md`.
 
 ## Phase 9 — Docs
 
