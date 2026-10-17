@@ -199,8 +199,9 @@ If first audio remains over 3 seconds, the voice is unacceptable, or install/com
   - **Stop and read again (confirmed after the T12.8 fix):** pressing Ctrl+Shift+S stops playback, and a following read of newly selected text plays normally — the aborted stream no longer leaves `/tts` and `/tts/stream` blocked with no audio. This is the check that exposed the cancellation deadlock recorded in T12.8.
   - **Stop during long-paragraph playback (confirmed):** pressing Ctrl+Shift+S while a long paragraph is playing stops the audio almost immediately.
   - **Server offline (confirmed):** stopping the server makes Chrome show the red offline status and the "Cain server offline — run server\run.ps1" toast, so a read with no back end fails visibly instead of silently.
+  - **Voice and long-paragraph audio quality (confirmed):** Cain's voice sounds great, and long-paragraph playback sounds good with no noticeable gaps or clicks between chunks.
 
-  **Not yet confirmed — checkbox stays unticked:** the post-warmup first-audio time measured in Chrome itself (the user reports "starts quickly", and the optimized probe measured first chunk 0.213–0.235 s, but no browser-side timing or server timing lines were recorded), Cain recognisability as a separate check, and absence of audible gaps/clicks between chunks.
+  **Not yet confirmed — checkbox stays unticked:** only the browser-measured, post-warmup first-audio time remains (the user reports "starts quickly" and the optimized probe measured first chunk 0.213–0.235 s, but no browser-side timing or server timing lines have been recorded yet).
 
   **Verified runtime configuration (user, GPU):**
   - Environment: `$env:CAIN_ENGINE="cain-streaming"` with `$env:CAIN_STREAMING_OPTIMIZE="1"`, run from the isolated environment `C:\TTS-Streaming-Test\.venv` (same `server\app.py`, `uvicorn app:app --host 127.0.0.1 --port 8765`). The production `torch 2.14.1+cu132` stack, `engines/cain.py` and `server\.venv` are untouched; rollback is `Remove-Item Env:CAIN_STREAMING_OPTIMIZE`.
