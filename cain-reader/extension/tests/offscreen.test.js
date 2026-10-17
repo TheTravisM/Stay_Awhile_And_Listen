@@ -391,3 +391,46 @@ test('starting one pipeline cancels the other', () => {
   assert.strictEqual(streamFirst.audio[0].playCount, 1);
   assert.deepStrictEqual(playbackStates(streamFirst), [], 'no state change on switch');
 });
+
+// --- WAV playback speed (T12.7) ----------------------------------------------
+// The server synthesizes at 1.0; the speed travels in the PLAY_CHUNK message and
+// is applied by the media element with pitch preserved.
+
+test('PLAY_CHUNK plays at the requested rate with pitch preserved', () => {
+  const env = loadOffscreen();
+  env.sandbox.onPlayChunk({ index: 0, wav: wavBase64, rate: 1.25 });
+
+  assert.strictEqual(env.audio[0].playbackRate, 1.25);
+  assert.strictEqual(env.audio[0].preservesPitch, true);
+  assert.strictEqual(env.audio[0].playCount, 1);
+});
+
+test('PLAY_CHUNK without a rate plays at 1.0', () => {
+  const env = loadOffscreen();
+  env.sandbox.onPlayChunk({ index: 0, wav: wavBase64 });
+
+  assert.strictEqual(env.audio[0].playbackRate, 1.0);
+  assert.strictEqual(env.audio[0].preservesPitch, true);
+});
+
+test('the playback rate follows the chunk it belongs to', () => {
+  const env = loadOffscreen();
+  env.sandbox.onPlayChunk({ index: 0, wav: wavBase64, rate: 1.25 });
+  env.sandbox.onPlayChunk({ index: 1, wav: wavBase64, rate: 1.0 });
+
+  assert.strictEqual(env.audio[0].playbackRate, 1.25, 'queued chunk keeps its own rate');
+
+  env.audio[0].handlers.ended();
+  assert.strictEqual(env.audio[0].playbackRate, 1.0, 'next chunk resets to its rate');
+});
+
+test('an unusable rate falls back to 1.0 instead of stopping playback', () => {
+  for (const rate of [0, -1, NaN, Infinity, 'fast', null, undefined]) {
+    const env = loadOffscreen();
+    env.sandbox.onPlayChunk({ index: 0, wav: wavBase64, rate });
+
+    assert.strictEqual(env.audio[0].playbackRate, 1.0, `rate ${String(rate)}`);
+    assert.strictEqual(env.audio[0].playCount, 1, 'playback still starts');
+    assert.deepStrictEqual(env.errors, []);
+  }
+});

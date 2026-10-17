@@ -155,6 +155,18 @@ If first audio remains over 3 seconds, the voice is unacceptable, or install/com
 
   **Note for T13.1:** the fast first-audio streaming start applies at speed `1.0` only. At any other speed the read waits for one full synthesis before playing, exactly as `CAIN_ENGINE=cain` does today (RTF ≈ 3, i.e. roughly the length of the sentence in seconds before audio starts).
 
+- [x] **T12.7 Apply speaking speed in the player, not on the server**
+
+  In `extension/offscreen.js`, apply `audio.playbackRate = rate` to WAV playback and keep pitch preserved. In `extension/background.js`, pass the selected speed to the offscreen WAV player (`PLAY_CHUNK.rate`) but send `speed: 1.0` to the server, so synthesis is never stretched twice. Keep the optimized PCM stream at speed 1.0 (the Web Audio clock cannot preserve pitch). Preserve Stop/cancel, offline/error handling and existing playback. No dependency installs, no engine or server change.
+
+  **Verify:** focused tests cover speed `1.0` and `1.25` for both the player and the request bodies; the whole extension suite passes.
+
+  **Confirmed (builder, no browser):** `node --check` OK on `offscreen.js`, `background.js` and both test files; `node --test extension/tests/chunker.test.js extension/tests/offscreen.test.js extension/tests/background.test.js` → **42/42 pass** (4 new offscreen tests, 2 background tests extended). `server/`, `engines/`, `chunker.js`, `popup.js` and `content.js` are untouched.
+
+  **Why:** `librosa.effects.time_stretch` is a phase vocoder and sounds echoey on speech, so the speed is now applied by the media element instead — Chrome's time-domain stretch with `preservesPitch` set explicitly is pitch-preserving and free of that artifact, and it also removes the extra stretch time from the request. Every `/tts` request now carries `speed: 1.0` (audio is never stretched twice), and `PLAY_CHUNK` carries `rate` per chunk, with a missing or unusable rate falling back to 1.0 so a rate cannot leak from one read into the next.
+
+  **Supersedes T12.6's note** that the server time-stretches the whole text: for extension reads the server no longer stretches at all. The fast first-audio streaming start still applies at speed `1.0` only.
+
 ---
 
 ## Phase 13 — End-to-end acceptance (user-driven)

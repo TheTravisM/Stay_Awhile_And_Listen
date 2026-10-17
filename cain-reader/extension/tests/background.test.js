@@ -73,6 +73,8 @@ function setup() {
 
 const offscreenTypes = () => env.offscreen.map((msg) => msg.type);
 const pcmChunks = () => env.offscreen.filter((msg) => msg.type === 'PLAY_PCM');
+const playChunkRates = () =>
+  env.offscreen.filter((msg) => msg.type === 'PLAY_CHUNK').map((msg) => msg.rate);
 
 function chunkRecord(index, audio, sampleRate = 24000) {
   return `${JSON.stringify({
@@ -203,9 +205,10 @@ test('a non-streaming server falls back to the chunked /tts path', async () => {
 
   assert.deepStrictEqual(urls, [STREAM_URL, TTS_URL]);
   assert.deepStrictEqual(offscreenTypes(), ['STOP', 'PLAY_CHUNK', 'DONE_SENDING']);
+  assert.deepStrictEqual(playChunkRates(), [1.0], 'speed 1.0 plays at rate 1.0');
 });
 
-test('speed != 1.0 sends the whole text to /tts in one request', async () => {
+test('speed != 1.0 sends the whole text to /tts unstretched and plays it at that rate', async () => {
   setup();
   env.speed = 1.25;
   const urls = [];
@@ -218,12 +221,14 @@ test('speed != 1.0 sends the whole text to /tts in one request', async () => {
 
   await bg.__test.startReading('Stay awhile and listen. Say it again, please.', 7);
 
-  // One request, so the server time-stretches a single finished waveform rather
-  // than one stretched clip per chunk; the stream endpoint is not attempted.
+  // One request, and the server is asked for speed 1.0: the offscreen player
+  // applies 1.25 with pitch preserved, so nothing is stretched twice and no
+  // phase-vocoder echo is added.
   assert.deepStrictEqual(urls, [TTS_URL]);
   assert.deepStrictEqual(bodies, [
-    { text: 'Stay awhile and listen. Say it again, please.', speed: 1.25 },
+    { text: 'Stay awhile and listen. Say it again, please.', speed: 1 },
   ]);
+  assert.deepStrictEqual(playChunkRates(), [1.25]);
   assert.deepStrictEqual(offscreenTypes(), ['STOP', 'PLAY_CHUNK', 'DONE_SENDING']);
 });
 
@@ -356,8 +361,10 @@ test('a long read at speed != 1.0 keeps the chunked /tts path', async () => {
   setup();
   env.speed = 1.5;
   const urls = [];
-  env.fetch = async (url) => {
+  const bodies = [];
+  env.fetch = async (url, init) => {
     urls.push(url);
+    bodies.push(JSON.parse(init.body));
     return new Response(new Uint8Array([1, 2]), { status: 200 });
   };
   const long = 'The quick brown fox jumps over the lazy dog. '.repeat(60);
@@ -366,6 +373,16 @@ test('a long read at speed != 1.0 keeps the chunked /tts path', async () => {
 
   assert.ok(!urls.includes(STREAM_URL), 'no stream request for a long read');
   assert.ok(urls.length > 1, 'chunked /tts requests');
+  assert.ok(
+    bodies.every((body) => body.speed === 1),
+    'synthesis is never stretched server-side'
+  );
+  const rates = playChunkRates();
+  assert.ok(rates.length > 1, 'every chunk is played');
+  assert.ok(
+    rates.every((rate) => rate === 1.5),
+    'every chunk plays at the selected speed'
+  );
 });
 
 test('a dead server at speed != 1.0 still toasts offline and stops', async () => {

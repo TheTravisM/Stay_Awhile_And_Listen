@@ -7,14 +7,25 @@ const audio = new Audio();
 
 audio.addEventListener("ended", () => playNext());
 
+// The requested speaking speed is applied here, by the media element, with
+// pitch preserved: the server always synthesizes at speed 1.0, because
+// stretching the waveform server-side (librosa's phase vocoder) sounds echoey.
+// Chrome defaults preservesPitch to true; it is set explicitly so a speed
+// change can never shift pitch.
+audio.preservesPitch = true;
+audio.playbackRate = 1.0;
+
 // --- Streaming PCM playback (T12.3) -----------------------------------------
 // Messages handled here (all `{ target: "offscreen" }`):
-//   PLAY_CHUNK   { index, wav }        one base64 WAV (existing path)
+//   PLAY_CHUNK   { index, wav, rate }  one base64 WAV (existing path); `rate` is
+//                                      the selected speed, applied with pitch
+//                                      preserved (missing/invalid -> 1.0)
 //   STREAM_START {}                    arm a streaming run; stops WAV playback
 //   PLAY_PCM     { sampleRate, pcm }   one base64 little-endian signed 16-bit
 //                                      MONO PCM chunk (no header); chunks must
 //                                      arrive in order and are scheduled in
-//                                      arrival order
+//                                      arrival order. Always speed 1.0: the
+//                                      Web Audio clock cannot preserve pitch.
 //   DONE_SENDING                       no more audio (shared with the WAV path)
 //   STOP                               cancel immediately (shared)
 //
@@ -82,7 +93,21 @@ function pcm16ToFloat32(bytes) {
 function start(item) {
   current = item;
   audio.src = item.url;
+  applyPlaybackRate(item.rate);
   audio.play().catch((err) => console.error("offscreen play failed:", err));
+}
+
+// Apply the speed carried by the chunk being started. A missing or unusable
+// rate falls back to 1.0, so a rate from an earlier read can never leak into
+// the next one.
+function applyPlaybackRate(rate) {
+  const value = Number.isFinite(rate) && rate > 0 ? rate : 1.0;
+  try {
+    audio.playbackRate = value;
+  } catch (err) {
+    console.error("offscreen: rejected playback rate", rate, err);
+    audio.playbackRate = 1.0;
+  }
 }
 
 function playNext() {
@@ -98,12 +123,13 @@ function playNext() {
 }
 
 // Existing WAV path. Unchanged except that it also drops an active PCM stream,
-// so two audio pipelines never play at once.
-function onPlayChunk({ index, wav }) {
+// so two audio pipelines never play at once, and that it carries the selected
+// speed (`rate`) to the player instead of the server.
+function onPlayChunk({ index, wav, rate }) {
   if (streamActive) cancelStreamPlayback();
   const url = URL.createObjectURL(base64ToBlob(wav));
   const idle = current === null;
-  queue.push({ index, url });
+  queue.push({ index, url, rate });
   if (idle) playNext();
 }
 

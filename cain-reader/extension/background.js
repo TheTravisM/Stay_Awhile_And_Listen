@@ -102,11 +102,15 @@ function arrayBufferToBase64(buf) {
   return btoa(binary);
 }
 
-async function fetchChunk(i, chunks, signal, speed) {
+// The server always synthesizes at speed 1.0 and the selected speed is applied
+// by the offscreen WAV player instead (`PLAY_CHUNK.rate`, pitch preserved).
+// Stretching server-side is both audible (librosa's phase vocoder sounds
+// echoey) and wasted work when the player is going to change the rate anyway.
+async function fetchChunk(i, chunks, signal) {
   const res = await fetch(TTS_URL, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ text: chunks[i], speed }),
+    body: JSON.stringify({ text: chunks[i], speed: 1.0 }),
     signal,
   });
   if (!res.ok) throw new TtsError(res.status);
@@ -116,8 +120,8 @@ async function fetchChunk(i, chunks, signal, speed) {
 // Start a chunk fetch but mark it handled. A run can exit (abort or a newer
 // read) before awaiting a lookahead fetch, and an unhandled rejection there
 // would show up as a service-worker console error on every failed read.
-function prefetch(i, chunks, signal, speed) {
-  const p = fetchChunk(i, chunks, signal, speed);
+function prefetch(i, chunks, signal) {
+  const p = fetchChunk(i, chunks, signal);
   p.catch(() => {});
   return p;
 }
@@ -340,10 +344,10 @@ async function startReading(text, tabId) {
   }
 
   // 4. Any other speed cannot stream (the streaming engine only speaks at
-  // speed=1.0), so while the text fits one request it goes to /tts whole: the
-  // server then time-stretches one finished waveform, pitch preserved, instead
-  // of stretching each chunk separately (which smears short clips and leaves
-  // gaps between the WAV blobs). Longer text keeps the chunked path below.
+  // speed=1.0), so while the text fits one request it goes to /tts whole and
+  // the offscreen player applies the speed with pitch preserved; the server is
+  // asked for speed 1.0 so nothing is stretched twice. Longer text keeps the
+  // chunked path below, which also plays at the selected rate.
   if (speed !== 1.0 && fitsOneRequest) {
     await readViaChunks([fullText], signal, speed, tabId, myRun);
     return;
@@ -353,12 +357,14 @@ async function startReading(text, tabId) {
   await readViaChunks(chunks, signal, speed, tabId, myRun);
 }
 
-async function readViaChunks(chunks, signal, speed, tabId, myRun) {
+// `rate` is the selected speaking speed; every chunk is played at it with pitch
+// preserved (the server synthesized it at 1.0).
+async function readViaChunks(chunks, signal, rate, tabId, myRun) {
   const last = chunks.length - 1;
 
   let index = 0;
-  let current = prefetch(0, chunks, signal, speed);
-  let pending = last >= 1 ? prefetch(1, chunks, signal, speed) : null;
+  let current = prefetch(0, chunks, signal);
+  let pending = last >= 1 ? prefetch(1, chunks, signal) : null;
   let offscreenReady = false;
 
   while (index <= last) {
@@ -403,13 +409,14 @@ async function readViaChunks(chunks, signal, speed, tabId, myRun) {
       type: "PLAY_CHUNK",
       index,
       wav,
+      rate,
     });
     index++;
     if (index > last) break;
     current = pending;
     pending = null;
     if (index + 1 <= last) {
-      pending = prefetch(index + 1, chunks, signal, speed);
+      pending = prefetch(index + 1, chunks, signal);
     }
   }
 
