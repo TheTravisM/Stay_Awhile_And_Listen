@@ -141,7 +141,7 @@ If first audio remains over 3 seconds, the voice is unacceptable, or install/com
   - **Exact command for T13.1** (production TTS server and Ollama stopped, from `cain-reader\server`):
     `$env:CAIN_ENGINE="cain-streaming"; $env:CAIN_STREAMING_OPTIMIZE="1"; C:\TTS-Streaming-Test\.venv\Scripts\python.exe -m uvicorn app:app --host 127.0.0.1 --port 8765`
     Rollback to the un-optimized path: `Remove-Item Env:CAIN_STREAMING_OPTIMIZE` (or set it to `0`) and restart.
-  - **Not verified (user, GPU):** whether the compiled path actually brings RTF below ~1.0, which is the T13.1 blocker. The server's warm-up lines report it. If RTF stays ~3, live playback is still NO-GO and T13.1 must not be marked complete.
+  - **Verified (user, GPU) — the T13.1 blocker is cleared:** the isolated optimized probe measured RTF **0.639–0.672** and first chunk **0.213–0.235 s**, i.e. comfortably under RTF 1.0, so generation now outruns playback instead of falling ~3× behind it. Numbers are the user's, not builder-measured. The un-optimized path (~RTF 3, T11.3) remains the rollback (`Remove-Item Env:CAIN_STREAMING_OPTIMIZE`), and `CAIN_ENGINE=cain` is unchanged.
 
 - [x] **T12.6 Fix speed control on the streaming engine**
 
@@ -167,6 +167,20 @@ If first audio remains over 3 seconds, the voice is unacceptable, or install/com
 
   **Supersedes T12.6's note** that the server time-stretches the whole text: for extension reads the server no longer stretches at all. The fast first-audio streaming start still applies at speed `1.0` only.
 
+  **User (reported):** the new speed playback "sounds good" — no echo or pitch distortion reported. (Recorded as reported; the exact speed/engine used was not specified.)
+
+- [x] **T12.8 Fix the streaming cancellation deadlock (Stop, then no audio)**
+
+  In `server/app.py`, close the `/tts/stream` generator deterministically instead of relying on garbage collection: keep the generator in a local (`gen = generate()`) and return `StreamingResponse(gen, media_type=STREAM_MEDIA_TYPE, background=BackgroundTask(_close_stream, gen))` (`from starlette.background import BackgroundTask`), where `_close_stream` calls `gen.close()` and never raises. Do not change the streaming format, the engines, the extension, or the `/tts` and `/health` handlers. No GPU inference and no dependency installs.
+
+  **Verify:** a regression test drives the real response with a fake ASGI `http.disconnect` (spec_version 2.3, as uvicorn reports) and asserts the engine iterator is closed and `_synthesis_lock` is free with no `gc.collect()`, then that a following `POST /tts` still returns a WAV; the whole server suite passes.
+
+  **Confirmed (builder, no GPU):** `pytest -q` → **56 passed** (55 before, +1 test; the existing disconnect test now drives a real disconnect instead of `aclose()` on the body iterator). No changes to `engines/`, `extension/` or any other server file. Checked against the pre-fix endpoint by stripping `response.background` in a throwaway script outside the project: `engine_closed=False`, lock not re-acquirable — the deadlock reproduces, so the test fails without the fix.
+
+  **Why:** `_synthesis_lock` is held across the stream's `yield`s, but Starlette wraps a *synchronous* body iterator in `iterate_in_threadpool` and never closes it (`starlette/responses.py`, no `aclose` on disconnect), so aborting a fetch mid-stream — exactly what Ctrl+Shift+S does (`reader.cancel()` + `AbortController.abort()` in `extension/background.js`) — left the generator suspended at a `yield` with the lock held. The lock was released only when CPython happened to finalise the abandoned generator (reference cycles around the cancelled task/traceback make that timing unpredictable), which is why the symptom was intermittent: until that collection, every later `/tts` and `/tts/stream` request waited on the lock and produced no audio, and because the extension has no fetch timeout the read hung silently with the read-in-progress flag still set, so the next shortcut press only stopped again. Background tasks run on disconnect for spec_version < 2.4, so closing the generator there ties the lock to the response's lifetime (the lock is already released on completion or error by the generator's own `finally`, which is why only the aborted-stream case was affected).
+
+  **Note for T13.1/T13.2:** the extension side was not changed; if a hung request is ever reported again, the remaining gap is the missing client-side fetch timeout (a blocked server currently shows as silence rather than an error toast).
+
 ---
 
 ## Phase 13 — End-to-end acceptance (user-driven)
@@ -176,6 +190,22 @@ If first audio remains over 3 seconds, the voice is unacceptable, or install/com
   With Ollama stopped, start the new engine using the exact environment variable/command documented by the builder. Reload the unpacked extension. Select the two test texts in a normal HTTPS page and use Ctrl+Shift+S. Confirm first speech starts within 3 seconds after warmup, the full sentence completes, Cain remains recognizable, chunks are in order without audible gaps/clicks, and pressing the shortcut again stops immediately. Also test server offline and cancellation during streaming.
 
   **Verify:** the user reports results and provides server timing lines. If any critical check fails, fix only the specific defect; allow one focused repair attempt before stopping and reporting the blocker.
+
+  **Confirmed results (user, Chrome — reported, not builder-measured):**
+  - Streaming starts quickly and sounds good.
+  - Long-text playback works well.
+  - Speed 1.25× sounds good, with no objectionable echo or distortion (the T12.7 player-side speed change).
+  - Speed 1.0× remains the default.
+  - **Stop and read again (confirmed after the T12.8 fix):** pressing Ctrl+Shift+S stops playback, and a following read of newly selected text plays normally — the aborted stream no longer leaves `/tts` and `/tts/stream` blocked with no audio. This is the check that exposed the cancellation deadlock recorded in T12.8.
+  - **Stop during long-paragraph playback (confirmed):** pressing Ctrl+Shift+S while a long paragraph is playing stops the audio almost immediately.
+  - **Server offline (confirmed):** stopping the server makes Chrome show the red offline status and the "Cain server offline — run server\run.ps1" toast, so a read with no back end fails visibly instead of silently.
+
+  **Not yet confirmed — checkbox stays unticked:** the post-warmup first-audio time measured in Chrome itself (the user reports "starts quickly", and the optimized probe measured first chunk 0.213–0.235 s, but no browser-side timing or server timing lines were recorded), Cain recognisability as a separate check, and absence of audible gaps/clicks between chunks.
+
+  **Verified runtime configuration (user, GPU):**
+  - Environment: `$env:CAIN_ENGINE="cain-streaming"` with `$env:CAIN_STREAMING_OPTIMIZE="1"`, run from the isolated environment `C:\TTS-Streaming-Test\.venv` (same `server\app.py`, `uvicorn app:app --host 127.0.0.1 --port 8765`). The production `torch 2.14.1+cu132` stack, `engines/cain.py` and `server\.venv` are untouched; rollback is `Remove-Item Env:CAIN_STREAMING_OPTIMIZE`.
+  - Optimized probe: RTF **0.639–0.672**, first chunk **0.213–0.235 s** (user-measured; resolves the open T12.5 RTF question).
+  - The Chrome checks recorded above — stop-and-read-again, immediate stop during long-paragraph playback, and the server-offline warning — all passed against this configuration.
 
 - [ ] **T13.2 Baseline/fallback and final regression**
 

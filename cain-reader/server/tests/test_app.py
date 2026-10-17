@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import threading
+import time
 
 import numpy as np
 import pytest
@@ -90,18 +91,53 @@ class _ClosableEngine:
 
     name = "fake-streaming"
 
-    def __init__(self):
+    def __init__(self, chunks=2, step_delay=0.0):
         self.closed = False
+        self.chunks = chunks
+        self.step_delay = step_delay
 
     def stream(self, text, speed=1.0):
         return self._chunks()
 
     def _chunks(self):
         try:
-            yield np.zeros(8, dtype=np.float32), SAMPLE_RATE
-            yield np.zeros(8, dtype=np.float32), SAMPLE_RATE
+            for _ in range(self.chunks):
+                if self.step_delay:
+                    # Stands in for one GPU synthesis step so a client abort
+                    # lands while the generator is suspended at its yield (and
+                    # so still holding the synthesis lock) instead of after the
+                    # stream has already finished.
+                    time.sleep(self.step_delay)
+                yield np.zeros(8, dtype=np.float32), SAMPLE_RATE
         finally:
             self.closed = True
+
+
+def _drive_stream_until_disconnect(response):
+    """Drive a ``StreamingResponse`` the way uvicorn does, aborting mid-stream.
+
+    Starlette's disconnect listener cancels the response task as soon as the
+    client goes away at spec_version 2.3 (what uvicorn reports), which is what a
+    fetch aborted by Ctrl+Shift+S looks like on the server. TestClient cannot
+    stand in for this: closing its response closes the body iterator itself,
+    exactly the cleanup a real disconnect does not perform.
+    """
+
+    async def drive():
+        queue = asyncio.Queue()
+        await queue.put({"type": "http.request"})
+
+        async def receive():
+            return await queue.get()
+
+        async def send(message):
+            if message["type"] == "http.response.body" and message.get("body"):
+                await queue.put({"type": "http.disconnect"})
+
+        scope = {"type": "http", "asgi": {"version": "3.0", "spec_version": "2.3"}}
+        await response(scope, receive, send)
+
+    asyncio.run(drive())
 
 
 def _streaming_engine(model=None):
@@ -165,21 +201,55 @@ def test_stream_is_incremental_not_buffered(monkeypatch):
 
 
 def test_stream_releases_lock_and_closes_engine_on_disconnect(monkeypatch):
-    engine = _ClosableEngine()
+    # Slow chunks: the abort lands mid-stream, with the generator suspended at
+    # its yield and the synthesis lock still held.
+    engine = _ClosableEngine(chunks=5, step_delay=0.2)
     monkeypatch.setattr(app_module, "engine", engine)
 
     response = app_module.tts_stream(app_module.TTSRequest(text="hello"))
 
-    async def read_one_then_disconnect():
-        iterator = response.body_iterator
-        await iterator.__anext__()
-        await iterator.aclose()
-
-    asyncio.run(read_one_then_disconnect())
+    _drive_stream_until_disconnect(response)
 
     assert engine.closed is True  # engine iterator closed, not left to GC
     assert app_module._synthesis_lock.acquire(blocking=False) is True
     app_module._synthesis_lock.release()
+
+
+class _ClosableSynthesizeEngine(_ClosableEngine):
+    """The closable stream above plus /tts, so a later request can be checked."""
+
+    def synthesize(self, text, speed=1.0):
+        return StubEngine().synthesize(text, speed)
+
+
+def test_disconnect_releases_lock_and_later_tts_works(monkeypatch):
+    """An aborted stream (Ctrl+Shift+S) must not block later reads.
+
+    Regression for the deadlock: /tts/stream holds ``_synthesis_lock`` across
+    its yields, Starlette never closes a synchronous body iterator it streams
+    from, and so an aborted stream used to keep the lock until CPython happened
+    to finalise the abandoned generator -- every later /tts and /tts/stream
+    request then waited forever and produced no audio. The endpoint now closes
+    its generator from a background task, which runs on disconnect too.
+    """
+    engine = _ClosableSynthesizeEngine(chunks=5, step_delay=0.2)
+    monkeypatch.setattr(app_module, "engine", engine)
+
+    response = app_module.tts_stream(app_module.TTSRequest(text="hello"))
+    assert isinstance(response, StreamingResponse)
+    assert response.background is not None  # the close the client never does
+
+    _drive_stream_until_disconnect(response)
+
+    # Deliberately no gc.collect(): the lock must be free because the generator
+    # was closed, not because a collection pass happened to finalise it.
+    assert engine.closed is True
+    assert app_module._synthesis_lock.acquire(blocking=False) is True
+    app_module._synthesis_lock.release()
+
+    r = client.post("/tts", json={"text": "hello"})
+    assert r.status_code == 200
+    assert r.content[:4] == b"RIFF"
 
 
 def test_stream_501_for_engine_without_streaming(monkeypatch):

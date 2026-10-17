@@ -7,6 +7,7 @@ import time
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
+from starlette.background import BackgroundTask
 
 from engines import get_engine
 
@@ -91,6 +92,23 @@ def _ndjson(payload: dict) -> str:
     return json.dumps(payload, separators=(",", ":")) + "\n"
 
 
+def _close_stream(gen) -> None:
+    """Close a streamed generator whose client may have gone away.
+
+    Starlette wraps a synchronous body iterator in ``iterate_in_threadpool`` and
+    never closes it, so a client that aborts mid-stream (the extension's Stop)
+    leaves the generator suspended at its ``yield`` with ``_synthesis_lock``
+    held; the lock would then be released only whenever CPython happens to
+    finalise the generator, and until then every later ``/tts`` and
+    ``/tts/stream`` request blocked and produced no audio. Background tasks run
+    on disconnect too, so closing here ties the lock to the response lifetime.
+    """
+    try:
+        gen.close()
+    except Exception as e:  # pragma: no cover - close must not fail the request
+        print(f"tts stream close failed: {e}", file=sys.stderr)
+
+
 @app.post("/tts/stream")
 def tts_stream(req: TTSRequest):
     """Stream synthesis as NDJSON audio-chunk records (format documented above)."""
@@ -168,4 +186,9 @@ def tts_stream(req: TTSRequest):
             file=sys.stderr,
         )
 
-    return StreamingResponse(generate(), media_type=STREAM_MEDIA_TYPE)
+    gen = generate()
+    return StreamingResponse(
+        gen,
+        media_type=STREAM_MEDIA_TYPE,
+        background=BackgroundTask(_close_stream, gen),
+    )
