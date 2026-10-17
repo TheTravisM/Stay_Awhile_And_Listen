@@ -13,6 +13,12 @@ def _engine_class(name: str):
         from .cain import CainEngine
 
         return CainEngine
+    if name == "cain-streaming":
+        # Opt-in streaming engine (T12.1). Imported lazily so the default
+        # stub/cain paths never touch the streaming fork.
+        from .cain_streaming import CainStreamingEngine
+
+        return CainStreamingEngine
     return _ENGINES.get(name)
 
 

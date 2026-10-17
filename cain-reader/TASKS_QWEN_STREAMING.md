@@ -49,7 +49,7 @@ If first audio remains over 3 seconds, the voice is unacceptable, or install/com
 
   **Verify:** report exact versions, exact callable signatures, safe Windows dependency set, any blockers, and the proposed isolated install command. If the fork only supports a conflicting runtime, stop and ask rather than altering production.
 
-- [ ] **T11.2 Create isolated test environment and minimal probe**
+- [x] **T11.2 Create isolated test environment and minimal probe**
 
   Create only these external files: `C:\TTS-Streaming-Test\probe_streaming.py` and any required environment/source files under `C:\TTS-Streaming-Test\`. Download the fork as a ZIP (no Git commands) and follow the **verified** Windows install instructions from T11.1. Create a fresh Python 3.12 venv in this external directory. Check for SoX before attempting to install it. Do not download model weights into the project. Do not implement the web server or Chrome changes yet.
 
@@ -59,39 +59,89 @@ If first audio remains over 3 seconds, the voice is unacceptable, or install/com
 
   **Verify:** `py_compile`/import smoke check succeeds in the isolated environment; report the exact user GPU command. No GPU benchmark is run by the builder.
 
-- [ ] **T11.3 Benchmark and Go/No-Go (user, GPU)**
+- [x] **T11.3 Benchmark and Go/No-Go (user, GPU)**
 
   Stop Ollama and stop the production TTS server before running the isolated GPU test. The builder must provide one exact PowerShell command to run `probe_streaming.py` using the isolated venv. Run the probe, listen to both output files, and paste the short timing summary plus any final errors. Repeat the same text after warmup so first-run overhead is separate.
 
-  **Verify:** compare first-chunk latency and total generation to the current baseline; user confirms Cain similarity and absence of clicks/gaps. Apply the Go/No-Go gate above. If NO-GO, record the reason in the task report and stop this phase; no production files change. If GO, mark T11.3 complete and wait for the user to say “next”.
+  **Verify:** compare first-chunk latency and total generation to the current baseline; user confirms Cain similarity and absence of clicks/gaps. Apply the Go/No-Go gate above. If NO-GO, record the reason in the task report and stop this phase; no production files change. If GO, mark T11.3 complete and wait for the user to say "next".
+
+  **Confirmed results (user, GPU — reported, not builder-measured):**
+  - Short text first playable chunk: **1.012 s** (Go/No-Go gate ≤ 3 s for short text → **GO**).
+  - Long text first playable chunk: **1.046 s**.
+  - Long text total generation: **20.740 s** (current 1.7B baseline: ~22–24 s).
+  - User confirmed the Cain voice sounds good and playback had no issues (no clicks/gaps reported).
+  - Isolated config: 1.7B Base, `flash_attention_2`, `emit_every_frames=4`, `decode_window_frames=80`, optional compilation **disabled**.
 
 ---
 
 ## Phase 12 — Add an opt-in server streaming path (only after T11.3 GO)
 
-- [ ] **T12.1 Add a separate streaming engine**
+- [x] **T12.1 Add a separate streaming engine**
 
   Add `cain-reader/server/engines/cain_streaming.py`; update `cain-reader/server/engines/__init__.py` only as needed to register an opt-in name, for example `cain-streaming`. Preserve `CAIN_ENGINE=cain` and `engines/cain.py` exactly as the fallback. Load the model once and cache the clone prompt. Match the fork's verified API; don't invent signatures. Do not install dependencies into production until an explicit dependency/version plan is documented and approved by the user.
 
   **Verify:** unit-test engine registration and input/error handling without GPU inference; existing server tests pass. Do not claim audio passed.
 
-- [ ] **T12.2 Add a streaming HTTP endpoint**
+  **Confirmed (builder, no GPU):** `py_compile` OK; `pytest -q` **21 passed** (17 new in `tests/test_engines.py`, 4 existing in `tests/test_app.py`). `CAIN_ENGINE=cain` and `engines/cain.py` are unchanged; `app.py` untouched; no production packages installed.
+
+  **Dependency plan — awaiting user approval:** the fork ships under the same distribution name (`qwen-tts 0.0.4`) and needs torch 2.10+cu130 + flash-attn, so it cannot coexist with production `qwen-tts 0.1.1` / torch 2.14.1+cu132. Full plan and options (a/b/c) are in the module docstring of `engines/cain_streaming.py`. Until a plan is approved, `CAIN_ENGINE=cain-streaming` raises a clear error naming the missing API instead of degrading silently.
+
+- [x] **T12.2 Add a streaming HTTP endpoint**
 
   Modify only `server/app.py` and add only the tests needed for this endpoint. Keep existing `POST /tts` response format unchanged. Add `POST /tts/stream` with a documented incremental framing protocol (newline-delimited JSON is acceptable) that emits each audio chunk as soon as produced, plus a final completion record; include sample rate and an explicitly documented PCM encoding. Handle errors, early cancellation, the existing synthesis lock, and no-audio/error cases. Don't buffer the full result before sending the first chunk.
 
   **Verify:** automated tests use a fake streaming engine to prove that multiple chunks are emitted incrementally in order, error responses are handled, and `/health` stays responsive. Existing `/tts` tests continue passing.
 
-- [ ] **T12.3 Implement incremental playback in the offscreen page**
+  **Confirmed (builder, no GPU):** `py_compile` OK; `pytest -q` **30 passed** (9 new `/tts/stream` tests in `tests/test_app.py`, 17 engine tests, 4 pre-existing). `POST /tts` response format unchanged. Wire format: NDJSON, one JSON object per line — `{"type":"chunk","index","sample_rate","channels","encoding":"pcm_s16le","samples","audio":<base64 s16le mono PCM>}` per chunk as produced, then `{"type":"done","chunks","samples","sample_rate","duration_s"}` or `{"type":"error","error"}`. HTTP 501 for engines without `stream()`, 400 for values the engine rejects (e.g. `speed != 1.0`), 422 for invalid bodies. The existing `_synthesis_lock` is held for the whole stream and released on completion/error/disconnect; the engine's iterator is closed on disconnect; `/health` stays responsive during streaming (verified with a blocked generator on a worker thread).
+
+  **Isolated launch path verified (option A, no GPU):** the shared `app.py` imports cleanly under `C:\TTS-Streaming-Test\.venv` (checked with `CAIN_ENGINE=stub` so no weights load), so the streaming server can run the same code from the isolated venv with `CAIN_ENGINE=cain-streaming`.
+
+  **Follow-up before T13.1:** `_warm_up()` in `app.py` still returns early for any engine whose `name != "cain"`, so `cain-streaming` gets no keep-warm. Either extend that check or send one warm-up request before measuring first-chunk latency. **Resolved in T12.5:** `_warm_up()` now covers `cain-streaming` and calls its `warm_up()`.
+
+- [x] **T12.3 Implement incremental playback in the offscreen page**
 
   Modify only `extension/offscreen.js` and, if necessary, `extension/offscreen.html`. Add the new message type(s) without changing existing `PLAY_CHUNK`, `DONE_SENDING`, `STOP`, or `PLAYBACK_STATE` behavior. Use Web Audio (or another tested approach) to queue incoming PCM chunks in order with minimal gaps. Stop must immediately cancel queued/playing stream audio and release resources. Do not start a second overlapping audio pipeline.
 
   **Verify:** add testable pure helpers where useful; run existing extension tests. Actual browser playback is a user test, not a builder claim.
 
-- [ ] **T12.4 Connect incremental fetching**
+  **Confirmed (builder, no browser):** `node --check extension/offscreen.js` OK; `node --test extension/tests/chunker.test.js extension/tests/offscreen.test.js` → **21/21 pass** (8 existing chunker + 13 new in `tests/offscreen.test.js`). `extension/offscreen.html` unchanged.
+
+  **Wire format for T12.4 (background.js must send exactly these):**
+  - `{target:"offscreen", type:"STREAM_START"}` — before the first chunk of a streaming read; arms the stream and stops any WAV playback. Optional: `PLAY_PCM` also arms implicitly, and `STREAM_START` with no chunks is harmless.
+  - `{target:"offscreen", type:"PLAY_PCM", sampleRate, pcm}` — `sampleRate` = integer Hz from the server record's `sample_rate`; `pcm` = the server record's `audio` field (base64 of raw little-endian signed 16-bit **mono** PCM, no WAV header). Forward chunks **in server order**; they are scheduled on the Web Audio clock in arrival order, back-to-back, so playback is gapless while chunks keep up with real time.
+  - `{target:"offscreen", type:"DONE_SENDING"}` — unchanged name and meaning ("no more audio"); it now terminates either pipeline. The offscreen reports `PLAYBACK_STATE {playing:false}` once the last scheduled chunk has actually finished, so `active` clears exactly as it does for `/tts`.
+  - `{target:"offscreen", type:"STOP"}` — unchanged; now also stops scheduled PCM, disconnects the gain node and closes the `AudioContext`.
+  - Behaviour: one pipeline at a time (starting either path cancels the other); malformed/empty chunks, an unsupported sample rate, or a mid-stream rate change are ignored with a console error and never break playback; a starved stream restarts with a 60 ms lead instead of overlapping; a safety-net timer reports idle if a source's `ended` event never fires.
+
+- [x] **T12.4 Connect incremental fetching**
 
   Modify only `extension/background.js` to read `/tts/stream` incrementally and forward each complete audio packet to the offscreen page immediately. Parse partial network reads safely. Keep `AbortController`/runId behavior, preserve retrigger-to-stop semantics, do not buffer the whole response, and toast errors consistently. Keep the existing `/tts` flow available as fallback. Do not alter chunker/cleaner behavior or shortcuts.
 
   **Verify:** add focused tests for stream framing/parsing if feasible; `node --test extension/tests/chunker.test.js` remains passing. Don't claim first audio is fast until the user tests it in Chrome.
+
+  **Confirmed (builder, no browser):** `node --check extension/background.js` OK; `node --test extension/tests/chunker.test.js extension/tests/offscreen.test.js extension/tests/background.test.js` → **33/33 pass** (8 existing chunker + 13 offscreen + 12 new `tests/background.test.js`). `chunker.js`, shortcuts and `content.js` untouched; the chunked `/tts` flow is preserved as fallback.
+
+  **How it works:** `startReading` still aborts the previous run, bumps `runId`, sets `active`, sends `STOP` and chunks the text, then prefers one `POST /tts/stream` request carrying the whole normalized text (`chunks.join(" ")`) when it is ≤ 2000 chars (the endpoint's per-request cap); longer reads go straight to the unchanged chunked `/tts` loop (`readViaChunks`). The NDJSON body is parsed incrementally by a pure `createNdjsonParser()` that only emits a line once its newline has arrived and keeps the tail, so a record split across network reads is handled; each `chunk` record is forwarded immediately — `STREAM_START` once, before the first packet, after the offscreen document is lazily created — then `PLAY_PCM {sampleRate: record.sample_rate, pcm: record.audio}`, and `done` ends with `DONE_SENDING`. Nothing is buffered beyond the current partial line. Fallback triggers on HTTP 400 (e.g. `speed != 1.0`), 404 or 501 (old server / non-streaming engine); a connection failure toasts the usual offline message, while a 5xx, an `error` record or a chunk-less stream toasts "TTS error" — either way the read stops with `STOP` + `active=false`, exactly as the `/tts` path does. `runId`/`signal` are re-checked before every send, so Stop or a newer read cannot leave a `PLAY_PCM` behind the `STOP` message, and a mid-stream Stop sends no `DONE_SENDING`.
+
+  **Test seam:** `background.js` now ends with `export const __test = { createNdjsonParser, startReading }` (inert at runtime — nothing imports the service worker). `tests/background.test.js` stubs the few `chrome.*` APIs used at load and drives `startReading` against fake `fetch` responses: split-read parsing, in-order PCM forwarding, chunks arriving while the body is still open (no whole-response buffering), 501/400/long-text fallback to `/tts`, offline, 5xx and error-record toasts, and a mid-stream STOP. Browser playback and first-audio latency remain user tests (T13.1).
+
+- [x] **T12.5 Enable the fork's compiled streaming path (opt-in) and warm it at startup**
+
+  Call the fork's documented `enable_streaming_optimizations(decode_window_frames=80)` in the isolated `cain-streaming` engine only, and pay its one-time compilation cost at server startup instead of on the first user read. Keep it off by default so the un-optimized path benchmarked in T11.3 remains the rollback. Do not touch `engines/cain.py`, the production `.venv`, or any production dependency. Do not run GPU inference.
+
+  **Verify:** unit/server tests prove the optimization is off unless explicitly opted in, that it is called with `decode_window_frames=80`, that a missing/failing implementation raises with the rollback named, and that the startup warm-up runs the warm-up texts; `CAIN_ENGINE=cain` behavior is unchanged.
+
+  **Confirmed (builder, no GPU):** `py_compile` OK; `pytest -q` → **55 passed** (25 new: 20 in `tests/test_engines.py`, 5 in `tests/test_app.py`). `engines/cain.py` unchanged; nothing installed into the production venv.
+
+  **How it works:**
+  - `CAIN_STREAMING_OPTIMIZE` selects the compiled path in `engines/cain_streaming.py` (unset/`0`/`false`/`no`/`off` = off; only `1`/`true`/`yes`/`on` = on). `CainStreamingEngine(optimize=...)` overrides it, which is what the unit tests use. When it is on, `__init__` calls `enable_streaming_optimizations(decode_window_frames=80)` immediately after the model load. A missing API or a failing call raises `RuntimeError` naming `CAIN_STREAMING_OPTIMIZE` as the rollback — it fails loudly rather than silently running un-optimized.
+  - The call itself only wraps the decoder/talker/codebook in `torch.compile`; compilation happens on the first real generation. `CainStreamingEngine.warm_up()` therefore runs real generations and discards the audio: all of `WARMUP_TEXTS` (three sentences of different lengths — `torch.compile` specialises on shape and the fork's own example warms up with several lengths before timing anything) on the compiled path, just the first sentence when un-optimized (which only warms CUDA/model caches).
+  - `app.py`'s `_warm_up()` now covers `WARM_UP_ENGINES = ("cain", "cain-streaming")` and calls `engine.warm_up()` when the engine provides one, otherwise the unchanged one-sentence `synthesize()` warm-up. `cain`/`stub` behavior is unchanged (same text, same lock, same `<engine> warmup failed: ...` log line).
+  - Expected startup logs (stderr): `cain-streaming optimize: enabled in X.XXXs (decode_window_frames=80; compilation itself happens in the warm-up below)`, then per warm-up text `cain-streaming timing: first_chunk=... total=... chunks=...` plus `cain-streaming warmup N/3: ...s optimize=on`. The first warm-up carries the compilation cost, so the first user read should not.
+  - **Exact command for T13.1** (production TTS server and Ollama stopped, from `cain-reader\server`):
+    `$env:CAIN_ENGINE="cain-streaming"; $env:CAIN_STREAMING_OPTIMIZE="1"; C:\TTS-Streaming-Test\.venv\Scripts\python.exe -m uvicorn app:app --host 127.0.0.1 --port 8765`
+    Rollback to the un-optimized path: `Remove-Item Env:CAIN_STREAMING_OPTIMIZE` (or set it to `0`) and restart.
+  - **Not verified (user, GPU):** whether the compiled path actually brings RTF below ~1.0, which is the T13.1 blocker. The server's warm-up lines report it. If RTF stays ~3, live playback is still NO-GO and T13.1 must not be marked complete.
 
 ---
 

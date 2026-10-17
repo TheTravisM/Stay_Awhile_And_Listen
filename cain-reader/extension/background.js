@@ -5,6 +5,10 @@ const SPEED_KEY = "speed";
 // storage.session key for "a read is in progress"; survives the SW sleeping.
 const ACTIVE_KEY = "active";
 const TTS_URL = "http://127.0.0.1:8765/tts";
+const TTS_STREAM_URL = "http://127.0.0.1:8765/tts/stream";
+// The stream endpoint takes one request per read (server cap: 2000 characters),
+// so longer reads keep using the chunked /tts path.
+const STREAM_MAX_CHARS = 2000;
 
 // In-memory mirror of the persisted "active" flag; storage.session is the
 // source of truth so the toggle survives the service worker sleeping.
@@ -146,6 +150,161 @@ async function ensureOffscreen() {
   await offscreenPromise;
 }
 
+// T12.4: incremental /tts/stream reading. The server emits newline-delimited
+// JSON, one record per line, but a network read can split a line anywhere, so
+// a line is only parsed once its terminating newline has arrived and the tail
+// is kept for the next read. Nothing is buffered beyond that partial line.
+// Pure (no chrome/DOM access) so it stays unit-testable.
+function createNdjsonParser() {
+  let buffered = "";
+  const takeLines = () => {
+    const records = [];
+    let nl;
+    while ((nl = buffered.indexOf("\n")) >= 0) {
+      const line = buffered.slice(0, nl).trim();
+      buffered = buffered.slice(nl + 1);
+      if (line) records.push(JSON.parse(line));
+    }
+    return records;
+  };
+  return {
+    push(text) {
+      buffered += text;
+      return takeLines();
+    },
+    flush() {
+      const tail = buffered.trim();
+      buffered = "";
+      return tail ? [JSON.parse(tail)] : [];
+    },
+  };
+}
+
+// Read /tts/stream incrementally, forwarding each PCM chunk to the offscreen
+// page as soon as it arrives. Returns "played", "fallback" (the server does not
+// stream this request: old server, non-streaming engine, or speed != 1.0),
+// "aborted" (Stop or a newer read) or "failed" (already toasted).
+async function streamReading(text, signal, speed, tabId, myRun) {
+  let res;
+  try {
+    res = await fetch(TTS_STREAM_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text, speed }),
+      signal,
+    });
+  } catch (err) {
+    if (signal.aborted || (err && err.name === "AbortError")) return "aborted";
+    const offline = err && err.name === "TypeError";
+    toast(
+      tabId,
+      offline ? "Cain server offline — run server\\run.ps1" : "TTS error",
+      "error"
+    );
+    await sendOffscreen({ target: "offscreen", type: "STOP" });
+    await setActive(false);
+    return "failed";
+  }
+  if (myRun !== runId) return "aborted";
+  if (res.status === 400 || res.status === 404 || res.status === 501) {
+    return "fallback";
+  }
+  if (!res.ok || !res.body) {
+    toast(tabId, "TTS error", "error");
+    await sendOffscreen({ target: "offscreen", type: "STOP" });
+    await setActive(false);
+    return "failed";
+  }
+
+  const parser = createNdjsonParser();
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let offscreenReady = false;
+  let sent = 0;
+  let aborted = false;
+  let streamError = false;
+
+  const handle = async (record) => {
+    if (aborted || streamError) return;
+    // Checked before every send: a STOP or a newer read must not leave another
+    // PLAY_PCM in flight behind the STOP message.
+    if (myRun !== runId || signal.aborted) {
+      aborted = true;
+      return;
+    }
+    if (!record || typeof record !== "object") return;
+    if (record.type === "error") {
+      streamError = true;
+      return;
+    }
+    if (record.type !== "chunk") return; // "done" needs no message of its own
+    if (!offscreenReady) {
+      // Created only once audio is actually arriving: Chrome force-closes an
+      // AUDIO_PLAYBACK offscreen document 30 s after creation if it has not
+      // started playing.
+      try {
+        await ensureOffscreen();
+      } catch (err) {
+        console.warn("cain: offscreen unavailable:", err);
+        streamError = true;
+        return;
+      }
+      if (myRun !== runId) {
+        aborted = true;
+        return;
+      }
+      offscreenReady = true;
+      await sendOffscreen({ target: "offscreen", type: "STREAM_START" });
+    }
+    await sendOffscreen({
+      target: "offscreen",
+      type: "PLAY_PCM",
+      sampleRate: record.sample_rate,
+      pcm: record.audio,
+    });
+    sent++;
+  };
+
+  try {
+    while (!aborted && !streamError) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      for (const record of parser.push(decoder.decode(value, { stream: true }))) {
+        await handle(record);
+        if (aborted || streamError) break;
+      }
+    }
+    if (!aborted && !streamError) {
+      for (const record of parser.push(decoder.decode())) await handle(record);
+      for (const record of parser.flush()) await handle(record);
+    }
+  } catch (err) {
+    if (signal.aborted || (err && err.name === "AbortError")) {
+      aborted = true;
+    } else {
+      console.warn("cain: stream read failed:", err);
+      streamError = true;
+    }
+  } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      /* already closed or aborted */
+    }
+  }
+
+  if (aborted || myRun !== runId) return "aborted";
+  if (streamError || sent === 0) {
+    toast(tabId, "TTS error", "error");
+    await sendOffscreen({ target: "offscreen", type: "STOP" });
+    await setActive(false);
+    return "failed";
+  }
+  await sendOffscreen({ target: "offscreen", type: "DONE_SENDING" });
+  // active stays true; T5.3 clears it on PLAYBACK_STATE {playing:false}.
+  return "played";
+}
+
 async function startReading(text, tabId) {
   // 1. stop any current read
   if (currentController) currentController.abort();
@@ -165,10 +324,24 @@ async function startReading(text, tabId) {
   }
   if (truncated) toast(tabId, "Reading first 5,000 characters", "warn");
 
-  // 3. fetch chunks sequentially with one-chunk lookahead (max 2 in flight)
-  const last = chunks.length - 1;
   const speed = await getSpeed();
   if (myRun !== runId) return;
+
+  // 3. prefer the incremental stream: one request, audio played as the server
+  // produces it. Anything the server cannot stream falls back to /tts below.
+  const fullText = chunks.join(" ");
+  if (fullText.length <= STREAM_MAX_CHARS) {
+    const outcome = await streamReading(fullText, signal, speed, tabId, myRun);
+    if (outcome !== "fallback") return;
+    if (myRun !== runId) return;
+  }
+
+  // 4. fetch chunks sequentially with one-chunk lookahead (max 2 in flight)
+  await readViaChunks(chunks, signal, speed, tabId, myRun);
+}
+
+async function readViaChunks(chunks, signal, speed, tabId, myRun) {
+  const last = chunks.length - 1;
 
   let index = 0;
   let current = prefetch(0, chunks, signal, speed);
@@ -304,3 +477,8 @@ chrome.commands.onCommand.addListener(async (command) => {
   }
   startReading(text, tab.id);
 });
+
+// Exported only so node:test can drive this module (see
+// tests/background.test.js); the service worker itself never imports it, so
+// these exports are inert at runtime.
+export const __test = { createNdjsonParser, startReading };
