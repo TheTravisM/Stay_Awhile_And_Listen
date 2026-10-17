@@ -205,25 +205,25 @@ test('a non-streaming server falls back to the chunked /tts path', async () => {
   assert.deepStrictEqual(offscreenTypes(), ['STOP', 'PLAY_CHUNK', 'DONE_SENDING']);
 });
 
-test('a speed the stream endpoint refuses falls back to /tts', async () => {
+test('speed != 1.0 sends the whole text to /tts in one request', async () => {
   setup();
   env.speed = 1.25;
   const urls = [];
+  const bodies = [];
   env.fetch = async (url, init) => {
     urls.push(url);
-    if (url === STREAM_URL) {
-      assert.deepStrictEqual(JSON.parse(init.body), {
-        text: 'Stay awhile and listen.',
-        speed: 1.25,
-      });
-      return new Response('{"error":"streaming supports speed=1.0 only"}', { status: 400 });
-    }
+    bodies.push(JSON.parse(init.body));
     return new Response(new Uint8Array([1, 2]), { status: 200 });
   };
 
-  await bg.__test.startReading('Stay awhile and listen.', 7);
+  await bg.__test.startReading('Stay awhile and listen. Say it again, please.', 7);
 
-  assert.deepStrictEqual(urls, [STREAM_URL, TTS_URL]);
+  // One request, so the server time-stretches a single finished waveform rather
+  // than one stretched clip per chunk; the stream endpoint is not attempted.
+  assert.deepStrictEqual(urls, [TTS_URL]);
+  assert.deepStrictEqual(bodies, [
+    { text: 'Stay awhile and listen. Say it again, please.', speed: 1.25 },
+  ]);
   assert.deepStrictEqual(offscreenTypes(), ['STOP', 'PLAY_CHUNK', 'DONE_SENDING']);
 });
 
@@ -324,5 +324,98 @@ test('STOP mid-stream stops further chunks and sends no DONE_SENDING', async () 
 
   assert.deepStrictEqual(pcmChunks().map((msg) => msg.pcm), ['AAAA']);
   assert.deepStrictEqual(offscreenTypes(), ['STOP', 'STREAM_START', 'PLAY_PCM', 'STOP']);
+  await waitFor(() => env.active === false);
+});
+
+// --- speed control (T12.6) ---------------------------------------------------
+
+test('speed 1.0 still streams the whole text in one request', async () => {
+  setup();
+  const urls = [];
+  env.fetch = async (url, init) => {
+    urls.push(url);
+    assert.deepStrictEqual(JSON.parse(init.body), {
+      text: 'Stay awhile and listen. Say it again, please.',
+      speed: 1,
+    });
+    return streamBody(chunkRecord(0, 'AAAA') + '{"type":"done"}\n');
+  };
+
+  await bg.__test.startReading('Stay awhile and listen. Say it again, please.', 7);
+
+  assert.deepStrictEqual(urls, [STREAM_URL]);
+  assert.deepStrictEqual(offscreenTypes(), [
+    'STOP',
+    'STREAM_START',
+    'PLAY_PCM',
+    'DONE_SENDING',
+  ]);
+});
+
+test('a long read at speed != 1.0 keeps the chunked /tts path', async () => {
+  setup();
+  env.speed = 1.5;
+  const urls = [];
+  env.fetch = async (url) => {
+    urls.push(url);
+    return new Response(new Uint8Array([1, 2]), { status: 200 });
+  };
+  const long = 'The quick brown fox jumps over the lazy dog. '.repeat(60);
+
+  await bg.__test.startReading(long, 7);
+
+  assert.ok(!urls.includes(STREAM_URL), 'no stream request for a long read');
+  assert.ok(urls.length > 1, 'chunked /tts requests');
+});
+
+test('a dead server at speed != 1.0 still toasts offline and stops', async () => {
+  setup();
+  env.speed = 0.75;
+  env.fetch = async () => {
+    throw new TypeError('fetch failed');
+  };
+
+  await bg.__test.startReading('Stay awhile and listen.', 7);
+
+  assert.deepStrictEqual(
+    env.toasts.map((msg) => msg.text),
+    ['Cain server offline — run server\\run.ps1']
+  );
+  assert.deepStrictEqual(offscreenTypes(), ['STOP', 'STOP']);
+  assert.strictEqual(env.active, false);
+});
+
+test('a /tts error at speed != 1.0 toasts and stops', async () => {
+  setup();
+  env.speed = 1.5;
+  env.fetch = async () => new Response('{"error":"boom"}', { status: 500 });
+
+  await bg.__test.startReading('Stay awhile and listen.', 7);
+
+  assert.deepStrictEqual(env.toasts.map((msg) => msg.text), ['TTS error']);
+  assert.deepStrictEqual(offscreenTypes(), ['STOP', 'STOP']);
+  assert.strictEqual(env.active, false);
+});
+
+test('STOP during a speed != 1.0 read aborts it without playing', async () => {
+  setup();
+  env.speed = 1.5;
+  let signal = null;
+  env.fetch = async (url, init) => {
+    signal = init.signal;
+    return await new Promise((resolve, reject) => {
+      init.signal.addEventListener('abort', () =>
+        reject(new DOMException('aborted', 'AbortError'))
+      );
+    });
+  };
+
+  const reading = bg.__test.startReading('Stay awhile and listen.', 7);
+  await waitFor(() => signal != null);
+  env.listeners.message({ target: 'background', type: 'STOP' });
+  await reading;
+
+  assert.deepStrictEqual(offscreenTypes(), ['STOP', 'STOP']);
+  assert.strictEqual(pcmChunks().length, 0);
   await waitFor(() => env.active === false);
 });

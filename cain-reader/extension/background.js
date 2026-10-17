@@ -6,9 +6,9 @@ const SPEED_KEY = "speed";
 const ACTIVE_KEY = "active";
 const TTS_URL = "http://127.0.0.1:8765/tts";
 const TTS_STREAM_URL = "http://127.0.0.1:8765/tts/stream";
-// The stream endpoint takes one request per read (server cap: 2000 characters),
-// so longer reads keep using the chunked /tts path.
-const STREAM_MAX_CHARS = 2000;
+// Both endpoints take one request per read (server cap: 2000 characters), so
+// longer reads keep using the chunked /tts path.
+const MAX_REQUEST_CHARS = 2000;
 
 // In-memory mirror of the persisted "active" flag; storage.session is the
 // source of truth so the toggle survives the service worker sleeping.
@@ -327,16 +327,29 @@ async function startReading(text, tabId) {
   const speed = await getSpeed();
   if (myRun !== runId) return;
 
-  // 3. prefer the incremental stream: one request, audio played as the server
-  // produces it. Anything the server cannot stream falls back to /tts below.
   const fullText = chunks.join(" ");
-  if (fullText.length <= STREAM_MAX_CHARS) {
+  const fitsOneRequest = fullText.length <= MAX_REQUEST_CHARS;
+
+  // 3. At speed 1.0 prefer the incremental stream: one request, audio played as
+  // the server produces it. Anything the server cannot stream falls back to the
+  // chunked /tts path below.
+  if (speed === 1.0 && fitsOneRequest) {
     const outcome = await streamReading(fullText, signal, speed, tabId, myRun);
     if (outcome !== "fallback") return;
     if (myRun !== runId) return;
   }
 
-  // 4. fetch chunks sequentially with one-chunk lookahead (max 2 in flight)
+  // 4. Any other speed cannot stream (the streaming engine only speaks at
+  // speed=1.0), so while the text fits one request it goes to /tts whole: the
+  // server then time-stretches one finished waveform, pitch preserved, instead
+  // of stretching each chunk separately (which smears short clips and leaves
+  // gaps between the WAV blobs). Longer text keeps the chunked path below.
+  if (speed !== 1.0 && fitsOneRequest) {
+    await readViaChunks([fullText], signal, speed, tabId, myRun);
+    return;
+  }
+
+  // 5. fetch chunks sequentially with one-chunk lookahead (max 2 in flight)
   await readViaChunks(chunks, signal, speed, tabId, myRun);
 }
 

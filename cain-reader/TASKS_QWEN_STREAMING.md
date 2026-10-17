@@ -143,6 +143,18 @@ If first audio remains over 3 seconds, the voice is unacceptable, or install/com
     Rollback to the un-optimized path: `Remove-Item Env:CAIN_STREAMING_OPTIMIZE` (or set it to `0`) and restart.
   - **Not verified (user, GPU):** whether the compiled path actually brings RTF below ~1.0, which is the T13.1 blocker. The server's warm-up lines report it. If RTF stays ~3, live playback is still NO-GO and T13.1 must not be marked complete.
 
+- [x] **T12.6 Fix speed control on the streaming engine**
+
+  At speed `1.0` keep the incremental `/tts/stream` path. At any other speed, send one `/tts` request for the whole text while it fits the 2,000-character request cap, so the server time-stretches one finished waveform (`librosa.effects.time_stretch`, pitch preserved) instead of once per chunk; longer text keeps the existing chunked path. Preserve Stop/cancel and offline/error handling. Do not change the engines or install dependencies, and no playback-rate change that alters pitch.
+
+  **Verify:** focused extension tests cover both speeds, the single-request body, the long-text fallback, offline/error toasts and a mid-read STOP; the existing extension suite still passes.
+
+  **Confirmed (builder, no browser):** `node --check extension/background.js` and `extension/tests/background.test.js` OK; `node --test extension/tests/chunker.test.js extension/tests/offscreen.test.js extension/tests/background.test.js` → **38/38 pass** (5 new, 1 rewritten). `extension/offscreen.js`, `extension/chunker.js`, `server/` and the engines are untouched.
+
+  **Why:** `CainStreamingEngine.stream()` rejects `speed != 1.0`, so `/tts/stream` answered HTTP 400 and every speed-adjusted read silently fell back to one `/tts` request per ~300-character chunk — stretching each chunk separately (audible smearing) and playing the WAV blobs back-to-back (gaps between them). The speed-adjusted read now skips the stream endpoint entirely and sends the whole text once, which is exactly the quality `CAIN_ENGINE=cain` already gives. It reuses `readViaChunks([fullText], ...)`, so Stop/cancel, offline/error toasts and the `PLAY_CHUNK` framing are unchanged; `STREAM_MAX_CHARS` was renamed to `MAX_REQUEST_CHARS` because the same 2,000-character cap now applies to both endpoints.
+
+  **Note for T13.1:** the fast first-audio streaming start applies at speed `1.0` only. At any other speed the read waits for one full synthesis before playing, exactly as `CAIN_ENGINE=cain` does today (RTF ≈ 3, i.e. roughly the length of the sentence in seconds before audio starts).
+
 ---
 
 ## Phase 13 — End-to-end acceptance (user-driven)
