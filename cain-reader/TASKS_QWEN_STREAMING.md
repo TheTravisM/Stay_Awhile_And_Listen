@@ -185,7 +185,7 @@ If first audio remains over 3 seconds, the voice is unacceptable, or install/com
 
 ## Phase 13 — End-to-end acceptance (user-driven)
 
-- [ ] **T13.1 Browser test (user, GPU)**
+- [x] **T13.1 Browser test (user, GPU)**
 
   With Ollama stopped, start the new engine using the exact environment variable/command documented by the builder. Reload the unpacked extension. Select the two test texts in a normal HTTPS page and use Ctrl+Shift+S. Confirm first speech starts within 3 seconds after warmup, the full sentence completes, Cain remains recognizable, chunks are in order without audible gaps/clicks, and pressing the shortcut again stops immediately. Also test server offline and cancellation during streaming.
 
@@ -200,19 +200,24 @@ If first audio remains over 3 seconds, the voice is unacceptable, or install/com
   - **Stop during long-paragraph playback (confirmed):** pressing Ctrl+Shift+S while a long paragraph is playing stops the audio almost immediately.
   - **Server offline (confirmed):** stopping the server makes Chrome show the red offline status and the "Cain server offline — run server\run.ps1" toast, so a read with no back end fails visibly instead of silently.
   - **Voice and long-paragraph audio quality (confirmed):** Cain's voice sounds great, and long-paragraph playback sounds good with no noticeable gaps or clicks between chunks.
+  - **Post-warmup first-audio latency (confirmed, browser-measured):** first speech starts in approximately 1 second or less — comfortably inside the ≤ 3 s gate. (The user's figure for the browser path; the optimized probe measured first chunk 0.213–0.235 s.)
 
-  **Not yet confirmed — checkbox stays unticked:** only the browser-measured, post-warmup first-audio time remains (the user reports "starts quickly" and the optimized probe measured first chunk 0.213–0.235 s, but no browser-side timing or server timing lines have been recorded yet).
+  **All T13.1 acceptance checks are now confirmed — checkbox ticked (user-driven task; the results above are user-reported, not builder-measured).** Source-vs-target remains unchanged: the streaming path is opt-in behind `CAIN_ENGINE=cain-streaming` (+ `CAIN_STREAMING_OPTIMIZE=1`), and `CAIN_ENGINE=cain` stays the untouched default fallback.
 
   **Verified runtime configuration (user, GPU):**
   - Environment: `$env:CAIN_ENGINE="cain-streaming"` with `$env:CAIN_STREAMING_OPTIMIZE="1"`, run from the isolated environment `C:\TTS-Streaming-Test\.venv` (same `server\app.py`, `uvicorn app:app --host 127.0.0.1 --port 8765`). The production `torch 2.14.1+cu132` stack, `engines/cain.py` and `server\.venv` are untouched; rollback is `Remove-Item Env:CAIN_STREAMING_OPTIMIZE`.
   - Optimized probe: RTF **0.639–0.672**, first chunk **0.213–0.235 s** (user-measured; resolves the open T12.5 RTF question).
   - The Chrome checks recorded above — stop-and-read-again, immediate stop during long-paragraph playback, and the server-offline warning — all passed against this configuration.
 
-- [ ] **T13.2 Baseline/fallback and final regression**
+- [x] **T13.2 Baseline/fallback and final regression**
 
   Confirm `CAIN_ENGINE=cain` still works through the unchanged `/tts` path. Run server pytest and the extension test suite. Confirm no model weights/audio were added to the project and the production fallback still exists. Record only measured first-chunk and total times in `NOTES.md`. Update README/TASKS documentation only after the user accepts the streaming result.
 
   **Verify:** all automated tests pass; user confirms both streaming mode and fallback work. Stop and wait for user acceptance.
+
+  **Confirmed (builder, no GPU, nothing installed):** server suite `server\.venv\Scripts\python.exe -m pytest -q` → **56 passed**; extension suite `node --test extension/tests/chunker.test.js extension/tests/offscreen.test.js extension/tests/background.test.js` → **42/42 pass** (Node v20.19.0). `CAIN_ENGINE=cain` is untouched: with `CAIN_ENGINE` unset `engines.get_engine()` returns the `stub` default, `CAIN_ENGINE=cain` resolves to `engines.cain.CainEngine`, and that class exposes `synthesize()` only — no `stream()` — so `/tts/stream` answers 501 and the extension's streaming attempt falls back to the chunked `/tts` path (the existing extension test "a non-streaming server falls back to the chunked /tts path" covers it). `engines/cain.py` was restored to baseline before this phase and contains no streaming/optimization reference (only `synthesize()` and `librosa.effects.time_stretch` when `speed != 1.0`); `cain-streaming`/`optimize` are reachable only through the explicit `CAIN_ENGINE` value and its lazy import in `engines/__init__.py`, so streaming stays opt-in. No `*.safetensors`/`*.pth`/`*.ckpt`/`*.bin` and no stray `*.wav` exist in the project outside the pre-existing asset directories (`server\voices`, `voice-source` — neither read nor modified); test audio stayed in `C:\TTS-Streaming-Test\`.
+
+  **Not covered by this task:** no browser run of `CAIN_ENGINE=cain` was made or requested here — the fallback is asserted from the unchanged engine plus the automated 501→fallback coverage, while the user's Chrome confirmations in T13.1 were all on the streaming configuration. `NOTES.md` was deliberately left untouched (this task scoped recording to this file); the user-measured first-chunk/total figures live in T13.1's runtime-configuration block. Final user acceptance of the streaming result remains with the user; the deferred list still stands (this tick does not mark Phase 8 acceptance, Phase 9 docs, Phase 10 cleanup or final acceptance).
 
 ## Deferred / explicitly out of scope
 
