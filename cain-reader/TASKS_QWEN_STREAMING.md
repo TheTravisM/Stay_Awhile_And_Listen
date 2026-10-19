@@ -43,11 +43,13 @@ If first audio remains over 3 seconds, the voice is unacceptable, or install/com
 
 ## Phase 11 — Isolated streaming proof
 
-- [ ] **T11.1 Read-only compatibility audit**
+- [x] **T11.1 Read-only compatibility audit**
 
   Inspect the current project and the fork's current `README.md`, `pyproject.toml`, `qwen_tts` implementation, and example. Inspect—not change—the existing server's Python, PyTorch, CUDA, Transformers, and `qwen-tts` versions; confirm the reference audio's format using metadata only. Verify the exact signatures/return types for `Qwen3TTSModel.from_pretrained`, `create_voice_clone_prompt`, and `stream_generate_voice_clone`; determine Windows requirements for PyTorch, FlashAttention, Triton, and SoX. Do not run GPU inference or install anything.
 
   **Verify:** report exact versions, exact callable signatures, safe Windows dependency set, any blockers, and the proposed isolated install command. If the fork only supports a conflicting runtime, stop and ask rather than altering production.
+
+  **Completed retrospectively (ticked after the fact; no new investigation, no code change):** the audit was carried out and reported before T11.2, and its findings are the recorded, verified evidence elsewhere in this file rather than a separate document — stack pins and the isolated install in **T11.2**, the fork's callable signatures/usage and the actual benchmark + Go/No-Go decision in **T11.3**, and the runtime configuration with measured numbers in **T13.1**. No blocker required altering production: the fork runs from its own environment and `CAIN_ENGINE=cain` stays the default fallback.
 
 - [x] **T11.2 Create isolated test environment and minimal probe**
 
