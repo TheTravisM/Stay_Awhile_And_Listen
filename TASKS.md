@@ -29,37 +29,36 @@ Build instructions for a **local Qwen 3.8 coding model** (49k context window). T
 
 ## Target layout
 
-Docs (`PRD.md`, `TASKS.md`) live one level above `cain-reader\`. Run commands from `cain-reader\server` unless a task says otherwise.
+Docs (`PRD.md`, `TASKS.md`) and the project share the repo root. Run commands from `server\` unless a task says otherwise.
 
 ```
-cain-reader/
-  README.md  NOTES.md  .gitignore  .gitattributes
-  scratch/              # temp files, gitignored
-  voice-source/         # user's raw audio, gitignored, builder never touches
-  server/
-    requirements.txt
-    app.py              # FastAPI: /health, /tts
-    engines/
-      __init__.py       # get_engine(name)
-      base.py           # Engine protocol
-      stub.py           # tone WAV, no model
-      cain.py           # real voice-clone engine
-    voices/             # cain.wav + cain.txt (user supplies; gitignored)
-    tests/test_app.py
-    run.ps1
-  extension/
-    package.json        # only {"type":"module"} so node can test ES modules
-    manifest.json
-    background.js
-    chunker.js          # pure function, unit-tested
-    cleaner.js          # pure function, unit-tested (Phase 10)
-    content.js          # selection + toast
-    offscreen.html
-    offscreen.js        # audio queue/playback
-    popup.html  popup.js  popup.css
-    icons/ (16,48,128 png — simple generated placeholders)
-    tests/chunker.test.js
-    tests/cleaner.test.js
+README.md  NOTES.md  PRD.md  TASKS.md  .gitignore  .gitattributes
+scratch/              # temp files, gitignored
+voice-source/         # user's raw audio, gitignored, builder never touches
+server/
+  requirements.txt
+  app.py              # FastAPI: /health, /tts
+  engines/
+    __init__.py       # get_engine(name)
+    base.py           # Engine protocol
+    stub.py           # tone WAV, no model
+    cain.py           # real voice-clone engine
+  voices/             # cain.wav + cain.txt (user supplies; gitignored)
+  tests/test_app.py
+  run.ps1
+extension/
+  package.json        # only {"type":"module"} so node can test ES modules
+  manifest.json
+  background.js
+  chunker.js          # pure function, unit-tested
+  cleaner.js          # pure function, unit-tested (Phase 10)
+  content.js          # selection + toast
+  offscreen.html
+  offscreen.js        # audio queue/playback
+  popup.html  popup.js  popup.css
+  icons/ (16,48,128 png — simple generated placeholders)
+  tests/chunker.test.js
+  tests/cleaner.test.js
 ```
 
 ---
@@ -71,12 +70,12 @@ cain-reader/
   - `.gitignore` containing: `.venv/`, `__pycache__/`, `scratch/`, `voice-source/`, `server/voices/*.wav`, `*.pt`, `*.safetensors`, `node_modules/`
   - `.gitattributes` containing: `* text=auto`
   - `extension/package.json` containing exactly: `{"type": "module"}`
-  **Verify:** `Get-ChildItem -Recurse cain-reader` matches the layout.
+  **Verify:** `Get-ChildItem -Recurse .\extension, .\server` matches the layout.
 
 - [x] **T0.2 Python env**
   In PowerShell:
   ```
-  Set-Location cain-reader\server
+  Set-Location server
   py -3.12 -m venv .venv
   .\.venv\Scripts\python.exe --version
   ```
@@ -124,7 +123,7 @@ cain-reader/
 
 - [x] **T2.1 Manifest** — `extension/manifest.json`
   MV3. `name: "Cain Reader"`, `version: "0.1.0"`, `minimum_chrome_version: "116"`. Permissions: `contextMenus`, `storage`, `offscreen`, `activeTab`, `scripting`. `host_permissions: ["http://127.0.0.1:8765/*"]`. `background: {"service_worker": "background.js", "type": "module"}`. `action: {"default_popup": "popup.html"}`. `commands: {"read-selection": {"suggested_key": {"default": "Ctrl+Shift+S", "windows": "Ctrl+Shift+S"}, "description": "Read selected text aloud"}}`. `icons` 16/48/128.
-  **Verify:** from `cain-reader\`, `.\server\.venv\Scripts\python.exe -m json.tool extension\manifest.json` succeeds.
+  **Verify:** from the repo root, `.\server\.venv\Scripts\python.exe -m json.tool extension\manifest.json` succeeds.
 
 - [x] **T2.2 Placeholder icons**
   Generate three solid-colour PNGs (16/48/128) with a small Python script using only the stdlib (`zlib`+`struct`), or Pillow if installed. Save to `extension\icons\` as `icon16.png`, `icon48.png`, `icon128.png`. Delete the script afterwards.

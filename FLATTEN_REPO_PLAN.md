@@ -68,7 +68,7 @@ git status --short                       # Expect: no output
 ```
 *Skip if you'd rather keep the plan out of git.*
 
-- [ ] W1 done
+- [x] W1 done (user commit ceed777)
 
 ## W2 — Collision check (case-insensitive, excluding `.git`)  *(read-only)*
 ```powershell
@@ -189,7 +189,7 @@ git commit -m "Flatten repo: move cain-reader contents to the root (pure rename)
 git status --short          # Expect: no output
 git show --stat --oneline HEAD | Select-Object -First 12
 ```
-- [ ] W7 done
+- [x] W7 done (user commit 12c7d6f - pure rename, 36 x R100)
 
 ## W8 — Fix path references (separate commit; reviewed, not blanket-replaced)
 Re-run the search after the move, then edit **only** the "current instruction / command / code" hits. The hits found at plan time:
@@ -230,7 +230,7 @@ git commit -m "Docs/code: update paths after flattening the repo   (no functiona
 ```
 (Changes are documentation/comment-only; no runtime behaviour is touched. `server\` tests in W10 confirm nothing broke.)
 
-- [ ] W8 done
+- [x] W8 done (paths updated in TASKS.md, TASKS_QWEN_STREAMING.md, cain_streaming.py docstring; pytest 56 + extension 42 pass)
 
 ## W9 — Environment check: the server venv from its new path
 ```powershell

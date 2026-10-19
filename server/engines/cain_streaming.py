@@ -31,7 +31,7 @@ Dependency plan (documented for approval — NOT installed in production):
     librosa 1.0.0 / soundfile 0.14.0 / soxr 1.1.0 / sox 1.5.0 / einops 0.8.2.
   Conflicts with production (torch 2.14.1+cu132, qwen-tts 0.1.1): the fork
   needs torch 2.10+cu130 and its own qwen-tts, so installing it into
-  ``cain-reader/server/.venv`` would break the existing ``cain`` engine.
+  ``server/.venv`` would break the existing ``cain`` engine.
   Options needing user approval: (a) dedicated venv + separate streaming
   server process, (b) an explicitly pinned side-by-side plan, or (c) keep
   streaming out of production. Until a plan is approved this engine stays

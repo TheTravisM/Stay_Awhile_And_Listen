@@ -10,6 +10,8 @@ Current baseline: Qwen3-TTS 12Hz Base 1.7B; roughly 22–24 seconds to synthesiz
 
 **Important evidence caveat:** the fork advertises about 6× faster inference and offers `stream_generate_voice_clone()` / `stream_generate_pcm()`, but its README's RTX 5090 benchmark headings do not show usable benchmark numbers. Treat the speedup as an unverified claim, not a guarantee. Its example measures first-chunk latency separately and uses `emit_every_frames=4` for lower latency. Sources: [fork README](https://github.com/dffdeeq/Qwen3-TTS-streaming/blob/main/README.md), [streaming example](https://github.com/dffdeeq/Qwen3-TTS-streaming/blob/main/examples/test_streaming_optimized.py), [official Qwen3-TTS repo](https://github.com/QwenLM/Qwen3-TTS).
 
+**Layout note (2026-10-18):** the repo was flattened — `cain-reader\` contents now live at the repo root. Paths inside the recorded results in this file refer to the pre-flatten layout.
+
 ## Builder rules (read before every task)
 
 1. Do **one task at a time, in order**. Complete its Verify step, tick its checkbox, report in at most 5 lines, then stop and wait for the user's “next”.
@@ -17,15 +19,15 @@ Current baseline: Qwen3-TTS 12Hz Base 1.7B; roughly 22–24 seconds to synthesiz
 3. **Do not modify the production engine, server, extension, existing `TASKS.md`, or `NOTES.md` until the isolated proof passes the Go/No-Go gate in T11.3.**
 4. Do not run GPU inference, start/stop processes, or claim an audio test passed. GPU/model tests are marked **(user, GPU)**; write the exact command and stop for the user's result.
 5. Use PowerShell on Windows 10/11. No bash syntax, `&&`, `source`, `chmod`, `/tmp`, or Git commands. Use `curl.exe` rather than PowerShell's `curl` alias. Keep commands and output short.
-6. Use Python 3.12 and the existing server venv only to inspect its versions. **Never install or upgrade packages in `cain-reader\server\.venv` for this experiment.** A separate environment is mandatory.
-7. Never read, move, rename, delete, overwrite, or modify `cain-reader\voice-source\` or `cain-reader\server\voices\`. Use the existing `cain.wav` and `cain.txt` by absolute path; don't copy them. Never save model weights or generated audio inside the project. Put temporary code/results in the external test directory below.
+6. Use Python 3.12 and the existing server venv only to inspect its versions. **Never install or upgrade packages in `server\.venv` for this experiment.** A separate environment is mandatory.
+7. Never read, move, rename, delete, overwrite, or modify `voice-source\` or `server\voices\`. Use the existing `cain.wav` and `cain.txt` by absolute path; don't copy them. Never save model weights or generated audio inside the project. Put temporary code/results in the external test directory below.
 8. Use a hard stop if dependency installation needs unsupported wheels/source builds, fails twice, or requires changing the production Python/CUDA stack. Don't troubleshoot endlessly; report the blocker and ask.
 9. Keep the current 1.7B baseline available. Don't reduce model size, change voice assets, or change sampling settings without explicit approval.
 10. After each task, record only confirmed results. Never tick a user/GPU verification until the user reports it.
 
 ## Test paths and comparison
 
-- Production project: `C:\GitRepo\Stay_Awhile_And_Listen\cain-reader\`
+- Production project: `C:\GitRepo\Stay_Awhile_And_Listen\`
 - Isolated experiment: `C:\TTS-Streaming-Test\` (outside the production project)
 - Reuse the same Cain `cain.wav` + exact matching `cain.txt` transcript by path; don't use the fork's sample voice.
 - Use the same texts for all comparisons:
@@ -80,7 +82,7 @@ If first audio remains over 3 seconds, the voice is unacceptable, or install/com
 
 - [x] **T12.1 Add a separate streaming engine**
 
-  Add `cain-reader/server/engines/cain_streaming.py`; update `cain-reader/server/engines/__init__.py` only as needed to register an opt-in name, for example `cain-streaming`. Preserve `CAIN_ENGINE=cain` and `engines/cain.py` exactly as the fallback. Load the model once and cache the clone prompt. Match the fork's verified API; don't invent signatures. Do not install dependencies into production until an explicit dependency/version plan is documented and approved by the user.
+  Add `server/engines/cain_streaming.py`; update `server/engines/__init__.py` only as needed to register an opt-in name, for example `cain-streaming`. Preserve `CAIN_ENGINE=cain` and `engines/cain.py` exactly as the fallback. Load the model once and cache the clone prompt. Match the fork's verified API; don't invent signatures. Do not install dependencies into production until an explicit dependency/version plan is documented and approved by the user.
 
   **Verify:** unit-test engine registration and input/error handling without GPU inference; existing server tests pass. Do not claim audio passed.
 
@@ -140,7 +142,7 @@ If first audio remains over 3 seconds, the voice is unacceptable, or install/com
   - The call itself only wraps the decoder/talker/codebook in `torch.compile`; compilation happens on the first real generation. `CainStreamingEngine.warm_up()` therefore runs real generations and discards the audio: all of `WARMUP_TEXTS` (three sentences of different lengths — `torch.compile` specialises on shape and the fork's own example warms up with several lengths before timing anything) on the compiled path, just the first sentence when un-optimized (which only warms CUDA/model caches).
   - `app.py`'s `_warm_up()` now covers `WARM_UP_ENGINES = ("cain", "cain-streaming")` and calls `engine.warm_up()` when the engine provides one, otherwise the unchanged one-sentence `synthesize()` warm-up. `cain`/`stub` behavior is unchanged (same text, same lock, same `<engine> warmup failed: ...` log line).
   - Expected startup logs (stderr): `cain-streaming optimize: enabled in X.XXXs (decode_window_frames=80; compilation itself happens in the warm-up below)`, then per warm-up text `cain-streaming timing: first_chunk=... total=... chunks=...` plus `cain-streaming warmup N/3: ...s optimize=on`. The first warm-up carries the compilation cost, so the first user read should not.
-  - **Exact command for T13.1** (production TTS server and Ollama stopped, from `cain-reader\server`):
+  - **Exact command for T13.1** (production TTS server and Ollama stopped, from `server`):
     `$env:CAIN_ENGINE="cain-streaming"; $env:CAIN_STREAMING_OPTIMIZE="1"; C:\TTS-Streaming-Test\.venv\Scripts\python.exe -m uvicorn app:app --host 127.0.0.1 --port 8765`
     Rollback to the un-optimized path: `Remove-Item Env:CAIN_STREAMING_OPTIMIZE` (or set it to `0`) and restart.
   - **Verified (user, GPU) — the T13.1 blocker is cleared:** the isolated optimized probe measured RTF **0.639–0.672** and first chunk **0.213–0.235 s**, i.e. comfortably under RTF 1.0, so generation now outruns playback instead of falling ~3× behind it. Numbers are the user's, not builder-measured. The un-optimized path (~RTF 3, T11.3) remains the rollback (`Remove-Item Env:CAIN_STREAMING_OPTIMIZE`), and `CAIN_ENGINE=cain` is unchanged.
