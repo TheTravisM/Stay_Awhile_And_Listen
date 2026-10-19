@@ -80,6 +80,8 @@ The service worker does the talking to the server, because a web page is not all
 
 > **Note:** speed changes are applied by the audio player with pitch preserved, so the server always synthesizes at normal speed. Speech starts fastest at speed 1.00, where the extension can use streaming; at other speeds it waits for one full synthesis before playing.
 
+The exact package versions that make up the production and streaming environments are recorded in [`docs\environments.md`](docs/environments.md).
+
 ## Install ⚙️
 
 ### Part 1: start the server
@@ -226,7 +228,8 @@ Stay_Awhile_And_Listen\
 |-- PRD.md  TASKS.md              The product spec and the build plan
 |-- TASKS_QWEN_STREAMING.md       The streaming experiment plan and its results
 |-- NOTES.md                      Measured results, edge cases, user checklists
-|-- docs\                        One-off records and unused art
+|-- docs\                        Project records
+|   |-- environments.md          Exact package versions for both Python environments
 |   |-- FLATTEN_REPO_PLAN.md     The repository flattening plan (historical)
 |   `-- diablo-icon-02.png       Unused image, not loaded by the extension
 `-- README.md                     This file
