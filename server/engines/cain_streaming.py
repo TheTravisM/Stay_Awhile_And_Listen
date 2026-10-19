@@ -174,6 +174,9 @@ class CainStreamingEngine(Engine):
     """
 
     name: str = "cain-streaming"
+    # The compiled path builds its kernels on the first generations, so the
+    # server pays that cost in warm_up() before serving requests.
+    warm_up_at_startup: bool = True
 
     def __init__(self, model=None, prompt=None, optimize: bool | None = None) -> None:
         for path in (REF_WAV, REF_TXT):

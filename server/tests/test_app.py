@@ -346,7 +346,9 @@ def test_health_stays_responsive_while_streaming(monkeypatch):
 class _WarmUpEngine:
     """Engine that records whether the server used its ``warm_up()``."""
 
-    def __init__(self, name):
+    warm_up_at_startup = True
+
+    def __init__(self, name="future-engine"):
         self.name = name
         self.warm_ups = 0
         self.synth_calls = []
@@ -363,6 +365,7 @@ class _SynthesizeOnlyEngine:
     """Stands in for ``engines/cain.py``: synthesize, but no ``warm_up()``."""
 
     name = "cain"
+    warm_up_at_startup = True
 
     def __init__(self):
         self.synth_calls = []
@@ -372,9 +375,10 @@ class _SynthesizeOnlyEngine:
         return b"RIFF"
 
 
-@pytest.mark.parametrize("name", ["cain", "cain-streaming"])
-def test_warm_up_prefers_the_engine_warm_up(monkeypatch, name):
-    engine = _WarmUpEngine(name)
+def test_warm_up_prefers_the_engine_warm_up(monkeypatch):
+    # The name is deliberately one this app has never heard of: the flag, not a
+    # hardcoded list in app.py, decides who is warmed up.
+    engine = _WarmUpEngine()
     monkeypatch.setattr(app_module, "engine", engine)
 
     app_module._warm_up()
@@ -392,8 +396,12 @@ def test_warm_up_uses_one_sentence_without_an_engine_warm_up(monkeypatch):
     assert engine.synth_calls == [(app_module.WARMUP_TEXT, 1.0)]
 
 
-def test_warm_up_skips_engines_that_do_not_need_it(monkeypatch):
-    engine = _WarmUpEngine(StubEngine.name)
+def test_warm_up_skips_engines_that_decline_it(monkeypatch):
+    class _Declining(_WarmUpEngine):
+        warm_up_at_startup = False
+
+    # A familiar name must not be enough on its own: the flag says no.
+    engine = _Declining(CainStreamingEngine.name)
     monkeypatch.setattr(app_module, "engine", engine)
 
     app_module._warm_up()
@@ -402,9 +410,22 @@ def test_warm_up_skips_engines_that_do_not_need_it(monkeypatch):
     assert engine.synth_calls == []
 
 
+def test_warm_up_tolerates_an_engine_without_the_flag(monkeypatch):
+    class _Bare:
+        name = "third-party"
+
+        def synthesize(self, text, speed):
+            raise AssertionError("must not synthesize")
+
+    monkeypatch.setattr(app_module, "engine", _Bare())
+
+    app_module._warm_up()  # must not raise
+
+
 def test_warm_up_failure_does_not_stop_startup(monkeypatch, capsys):
     class _Failing:
         name = "cain-streaming"
+        warm_up_at_startup = True
 
         def warm_up(self):
             raise RuntimeError("no triton")

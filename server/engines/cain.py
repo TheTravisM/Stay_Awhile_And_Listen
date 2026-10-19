@@ -39,6 +39,9 @@ def _env_flag(name: str) -> bool:
 
 class CainEngine(Engine):
     name: str = "cain"
+    # Loading the model and building the voice prompt is the startup cost, so
+    # the server speaks one throwaway sentence before serving requests.
+    warm_up_at_startup: bool = True
 
     def __init__(self) -> None:
         for path in (REF_WAV, REF_TXT):

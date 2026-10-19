@@ -17,17 +17,18 @@ engine = get_engine()
 _synthesis_lock = threading.Lock()
 
 
-# Engines that pay a one-time setup cost at startup and are therefore warmed up
-# once here. The streaming engine also provides ``warm_up()``: on its compiled
+# Engines that pay a one-time setup cost declare ``warm_up_at_startup = True``
+# on their class, so the registry decides who is warmed up instead of a list
+# kept here. The streaming engine also provides ``warm_up()``: on its compiled
 # path (CAIN_STREAMING_OPTIMIZE=1) the first generations are what build the
 # torch.compile kernels, so that cost must be paid at startup rather than on the
 # user's first read. ``cain`` keeps the plain one-sentence warm-up below.
-WARM_UP_ENGINES = ("cain", "cain-streaming")
 WARMUP_TEXT = "Stay awhile and listen."
 
 
 def _warm_up() -> None:
-    if engine.name not in WARM_UP_ENGINES:
+    # ``getattr`` keeps third-party engines that predate the flag working.
+    if not getattr(engine, "warm_up_at_startup", False):
         return
     try:
         with _synthesis_lock:

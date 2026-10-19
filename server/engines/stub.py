@@ -5,6 +5,7 @@ import numpy as np
 
 class StubEngine:
     name: str = "stub"
+    warm_up_at_startup: bool = False
 
     def synthesize(self, text: str, speed: float = 1.0) -> bytes:
         sample_rate = 22050

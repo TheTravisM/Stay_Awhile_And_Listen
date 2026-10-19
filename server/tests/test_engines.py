@@ -97,6 +97,7 @@ def _wav_frames(wav: bytes) -> int:
 def test_stub_is_registered_and_default():
     assert _engine_class("stub") is StubEngine
     assert get_engine("stub").name == "stub"
+    assert StubEngine.warm_up_at_startup is False
 
 
 def test_unknown_engine_raises_value_error():
@@ -109,11 +110,13 @@ def test_cain_fallback_class_unchanged():
 
     assert _engine_class("cain") is CainEngine
     assert CainEngine.name == "cain"
+    assert CainEngine.warm_up_at_startup is True
 
 
 def test_cain_streaming_is_opt_in_registered():
     assert _engine_class("cain-streaming") is CainStreamingEngine
     assert CainStreamingEngine.name == "cain-streaming"
+    assert CainStreamingEngine.warm_up_at_startup is True
 
 
 # --- construction -----------------------------------------------------------
