@@ -1,1 +1,12 @@
-* text=auto
+# Normalize text to LF in the repository and in the working tree, so commits
+# stop printing "LF will be replaced by CRLF" on this Windows checkout.
+* text=auto eol=lf
+
+# Windows batch files must keep CRLF so cmd.exe parses labels and goto reliably.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Binary assets: never apply end-of-line conversion.
+*.png binary
+*.ttf binary
+*.wav binary
