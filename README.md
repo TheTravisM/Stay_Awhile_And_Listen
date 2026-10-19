@@ -226,6 +226,9 @@ Stay_Awhile_And_Listen\
 |-- PRD.md  TASKS.md              The product spec and the build plan
 |-- TASKS_QWEN_STREAMING.md       The streaming experiment plan and its results
 |-- NOTES.md                      Measured results, edge cases, user checklists
+|-- docs\                        One-off records and unused art
+|   |-- FLATTEN_REPO_PLAN.md     The repository flattening plan (historical)
+|   `-- diablo-icon-02.png       Unused image, not loaded by the extension
 `-- README.md                     This file
 ```
 
@@ -253,7 +256,7 @@ node --test extension/tests/chunker.test.js extension/tests/offscreen.test.js ex
 - **Streaming fork:** the optional `cain-streaming` engine uses [dffdeeq/Qwen3-TTS-streaming](https://github.com/dffdeeq/Qwen3-TTS-streaming), which the plan itself flags as a community project whose advertised speedup is not independently verified.
 - **Supporting libraries:** PyTorch, FastAPI, uvicorn, numpy, and librosa (used by the non-streaming engine when a speed other than 1.0 is requested).
 - **Font:** `extension/fonts/Exocet-Light.ttf` is a third-party typeface bundled for the popup. Check its licence before you redistribute this project.
-- **Icons:** the toolbar icons are generated placeholder PNGs. The unused `diablo-icon-02.png` at the repo root is not referenced by the extension.
+- **Icons:** the toolbar icons are generated placeholder PNGs. `docs\diablo-icon-02.png` is an unused image kept for reference; the extension does not load it.
 - **Blizzard assets:** Deckard Cain, "Stay awhile and listen", and Diablo artwork belong to Blizzard Entertainment. This is a personal, non-commercial tool and it bundles none of their audio.
 - **Licence:** this repository has no `LICENSE` file, so no licence is granted by default.
 - **Recorded performance (developer's RTX 3090, measured by the project author, not by a test):** the streaming engine starts speech in about a second or less after warm-up, with a first chunk around 0.21 to 0.24 seconds and a real-time factor near 0.65. The non-streaming `cain` baseline was roughly 22 to 24 seconds for a long sentence. Expect slower numbers on other hardware, and expect the very first request after a restart to take longer while the model loads.

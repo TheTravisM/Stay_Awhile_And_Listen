@@ -33,8 +33,9 @@ Docs (`PRD.md`, `TASKS.md`) and the project share the repo root. Run commands fr
 
 ```
 README.md  NOTES.md  PRD.md  TASKS.md  .gitignore  .gitattributes
-start-cain-server.cmd  TASKS_QWEN_STREAMING.md  FLATTEN_REPO_PLAN.md  diablo-icon-02.png
-                      # loose root files: one-click launcher, streaming plan, flatten record, unused image
+start-cain-server.cmd  TASKS_QWEN_STREAMING.md
+                      # loose root files: one-click launcher, streaming plan
+docs/                 # one-off records and unused art (FLATTEN_REPO_PLAN.md, diablo-icon-02.png)
 scratch/              # temp files, gitignored
 voice-source/         # user's raw audio, gitignored, builder never touches
 server/
