@@ -135,7 +135,7 @@ The exact package versions that make up the production and streaming environment
 
    You should see `"ok":true` and `"engine":"cain"`, plus the `uptime_s`, `model_loaded` and `optimized` fields. The server loads the model and speaks one warm-up sentence at startup, so wait for its startup messages to settle before your first read.
 
-> **Tip:** there is a one-click launcher, `start-cain-server.cmd`, in the repo root. Double-click it (or run it from PowerShell) and it will pick the right Python, set the engine, and refuse to start a second server if port 8765 is already busy. `start-cain-server.cmd /check` only reports the paths and the port state. Leave that window open while you use the extension; `Ctrl+C` stops the server.
+> **Tip:** there is a one-click launcher, `start-cain-server.cmd`, in the repo root. Double-click it (or run it from PowerShell) and it will pick the right Python, set the engine, and refuse to start a second server if port 8765 is already busy. `start-cain-server.cmd /check` only reports the paths and the port state, and `start-cain-server.cmd /stop` stops whatever is listening on port 8765. Leave the server window open while you use the extension; `Ctrl+C` stops the server.
 
 > **Note:** if PowerShell refuses to run the script with an execution policy error, run this once and try again:
 >
