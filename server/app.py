@@ -43,6 +43,10 @@ def _warm_up() -> None:
 
 _warm_up()
 
+# Uptime is measured from the moment startup work has finished, so the first
+# /health call reports time spent serving rather than time spent loading.
+_STARTED = time.monotonic()
+
 
 class TTSRequest(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
@@ -51,7 +55,16 @@ class TTSRequest(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"ok": True, "engine": engine.name, "voice": "cain"}
+    return {
+        "ok": True,
+        "engine": engine.name,
+        "voice": "cain",
+        "uptime_s": round(time.monotonic() - _STARTED, 1),
+        # Optional capabilities: engines that do not declare them report False
+        # instead of breaking the endpoint.
+        "model_loaded": bool(getattr(engine, "model_loaded", False)),
+        "optimized": bool(getattr(engine, "optimized", False)),
+    }
 
 
 @app.post("/tts")

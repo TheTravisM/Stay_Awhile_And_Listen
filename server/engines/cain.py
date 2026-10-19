@@ -42,6 +42,10 @@ class CainEngine(Engine):
     # Loading the model and building the voice prompt is the startup cost, so
     # the server speaks one throwaway sentence before serving requests.
     warm_up_at_startup: bool = True
+    # __init__ raises instead of returning without a model, so every instance
+    # that exists holds one.
+    model_loaded: bool = True
+    optimized: bool = False
 
     def __init__(self) -> None:
         for path in (REF_WAV, REF_TXT):

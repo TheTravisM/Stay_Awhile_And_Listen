@@ -31,6 +31,45 @@ def test_health_ok():
     assert body["ok"] is True
     assert body["engine"] == "stub"
     assert body["voice"] == "cain"
+    assert body["model_loaded"] is False
+    assert body["optimized"] is False
+    assert isinstance(body["uptime_s"], (int, float))
+    assert body["uptime_s"] >= 0
+
+
+def test_health_reports_engine_capabilities(monkeypatch):
+    class _Capable:
+        name = "cain-streaming"
+        model_loaded = True
+        optimized = True
+
+    monkeypatch.setattr(app_module, "engine", _Capable())
+
+    body = client.get("/health").json()
+
+    assert body["engine"] == "cain-streaming"
+    assert body["model_loaded"] is True
+    assert body["optimized"] is True
+
+
+def test_health_defaults_missing_capabilities_to_false(monkeypatch):
+    class _Bare:
+        name = "third-party"
+
+    monkeypatch.setattr(app_module, "engine", _Bare())
+
+    body = client.get("/health").json()
+
+    assert body["model_loaded"] is False
+    assert body["optimized"] is False
+
+
+def test_health_uptime_does_not_go_backwards():
+    first = client.get("/health").json()["uptime_s"]
+    time.sleep(0.02)
+    second = client.get("/health").json()["uptime_s"]
+
+    assert 0 <= first <= second
 
 
 def test_tts_returns_wav():

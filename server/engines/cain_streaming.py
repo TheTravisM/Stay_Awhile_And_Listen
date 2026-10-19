@@ -198,6 +198,16 @@ class CainStreamingEngine(Engine):
             )
         self.prompt = prompt
 
+    @property
+    def model_loaded(self) -> bool:
+        return self.model is not None
+
+    @property
+    def optimized(self) -> bool:
+        # _enable_optimizations() raises on failure, so reaching this engine
+        # with optimize=True means the compiled path really is on.
+        return self.optimize
+
     def _enable_optimizations(self) -> None:
         """Turn on the fork's compiled streaming path (T12.5).
 
