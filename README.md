@@ -19,7 +19,7 @@ This is a Chrome extension plus a small Python server that run entirely on your 
 Features, all of them wired up in this repository:
 
 - **Right-click menu:** select text, right-click, choose **Read with Cain**.
-- **Keyboard shortcut:** `Ctrl+Shift+S` reads the current selection. While audio is playing the same shortcut stops it, so it works as a toggle.
+- **Keyboard shortcut:** `Alt+Shift+S` reads the current selection. While audio is playing the same shortcut stops it, so it works as a toggle.
 - **Popup controls:** a status light for the local server, a speed slider (0.8 to 1.4, remembered between sessions), and a **Stop** button.
 - **Playback that survives browsing:** audio is played by a hidden offscreen page, so it keeps going while you switch tabs.
 - **Long text handled in pieces:** selections are split into sentences, capped at 5,000 characters, and the next chunk is requested while the current one plays.
@@ -30,7 +30,7 @@ Features, all of them wired up in this repository:
 
 ```mermaid
 flowchart LR
-    P["Web page: you select text"] -->|"right-click or Ctrl+Shift+S"| BG["background.js (service worker)"]
+    P["Web page: you select text"] -->|"right-click or Alt+Shift+S"| BG["background.js (service worker)"]
     BG -->|"POST /tts or /tts/stream"| SRV["Local server on 127.0.0.1:8765"]
     SRV --> ENG["TTS engine: stub, cain, or cain-streaming"]
     ENG -->|"WAV or PCM audio"| OFF["offscreen document (Audio element)"]
@@ -46,7 +46,7 @@ The service worker does the talking to the server, because a web page is not all
 ```
  Web page: select text
         |
-        | right-click "Read with Cain"  or  Ctrl+Shift+S
+        | right-click "Read with Cain"  or  Alt+Shift+S
         v
  background.js (service worker) --- chunk the text, then POST /tts/stream or /tts
         |                                          |
@@ -171,8 +171,8 @@ If you later change any file in `extension\`, click the reload arrow on the exte
 3. Select the text you want to hear.
 4. Start a read in either way:
    - Right-click the selection and choose **Read with Cain**, or
-   - Press `Ctrl+Shift+S`.
-5. Press `Ctrl+Shift+S` again, or click **Stop** in the popup, to stop playback.
+   - Press `Alt+Shift+S`.
+5. Press `Alt+Shift+S` again, or click **Stop** in the popup, to stop playback.
 6. Open the popup to check the server status, drag the speed slider (0.8 to 1.4), or stop playback. The speed you pick is saved and reused next time.
 
 Notes on behaviour, all of it from the code:
@@ -193,7 +193,7 @@ Notes on behaviour, all of it from the code:
 | The server exits at startup with "missing reference file" | `server\voices\cain.wav` or `cain.txt` is missing. They are gitignored and never shipped | Add your own clip and its exact transcript to `server\voices\` |
 | The first read stalls for a long time, or fails with a download error | The model weights are being fetched from Hugging Face for the first time, or there is no internet | Let the first download finish. Once cached, you can run fully offline with `$env:HF_HUB_OFFLINE="1"` before starting the server |
 | The launcher says port 8765 is already in use | Another server (an earlier run, or a different app) owns the port | Open `http://127.0.0.1:8765/health`; stop the old server, or close the app using the port |
-| `Ctrl+Shift+S` does nothing | Another extension or app already uses that shortcut | Open `chrome://extensions/shortcuts` and rebind **Read selected text aloud** |
+| `Alt+Shift+S` does nothing | Another extension or app already uses that shortcut | Open `chrome://extensions/shortcuts` and rebind **Read selected text aloud** |
 | `.\run.ps1` will not start at all | PowerShell execution policy | Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once |
 | Speech starts late, or playback stutters | The GPU is busy (a local LLM, a game, or a video call), or the speed is not 1.00, which disables streaming | Free the GPU and keep the speed at 1.00 for the fastest start |
 | Nothing happens on a `chrome://` page or a browser settings page | Content scripts cannot run on those pages | Use a normal web page; the right-click item still works where the selection text is available |
