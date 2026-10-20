@@ -206,7 +206,7 @@ async function streamReading(text, signal, speed, tabId, myRun) {
       "error"
     );
     await sendOffscreen({ target: "offscreen", type: "STOP" });
-    await setActive(false);
+    if (myRun === runId) await setActive(false);
     return "failed";
   }
   if (myRun !== runId) return "aborted";
@@ -216,7 +216,7 @@ async function streamReading(text, signal, speed, tabId, myRun) {
   if (!res.ok || !res.body) {
     toast(tabId, "TTS error", "error");
     await sendOffscreen({ target: "offscreen", type: "STOP" });
-    await setActive(false);
+    if (myRun === runId) await setActive(false);
     return "failed";
   }
 
@@ -301,7 +301,7 @@ async function streamReading(text, signal, speed, tabId, myRun) {
   if (streamError || sent === 0) {
     toast(tabId, "TTS error", "error");
     await sendOffscreen({ target: "offscreen", type: "STOP" });
-    await setActive(false);
+    if (myRun === runId) await setActive(false);
     return "failed";
   }
   await sendOffscreen({ target: "offscreen", type: "DONE_SENDING" });
@@ -323,6 +323,8 @@ async function startReading(text, tabId) {
   // 2. chunk
   const { chunks, truncated } = chunkText(text);
   if (!chunks.length) {
+    // Nothing will play, so the toggle must not stay in the "reading" state.
+    await setActive(false);
     toast(tabId, "Select some text first");
     return;
   }
@@ -382,7 +384,7 @@ async function readViaChunks(chunks, signal, rate, tabId, myRun) {
         "error"
       );
       await sendOffscreen({ target: "offscreen", type: "STOP" });
-      await setActive(false);
+      if (myRun === runId) await setActive(false);
       return;
     }
     if (myRun !== runId) return;
@@ -397,7 +399,7 @@ async function readViaChunks(chunks, signal, rate, tabId, myRun) {
         await ensureOffscreen();
       } catch (err) {
         console.warn("cain: offscreen unavailable:", err);
-        await setActive(false);
+        if (myRun === runId) await setActive(false);
         return;
       }
       if (myRun !== runId) return;

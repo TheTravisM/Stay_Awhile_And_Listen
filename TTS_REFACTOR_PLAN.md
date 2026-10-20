@@ -1,7 +1,7 @@
 # TTS Refactor Plan
 
 Status: approved, executing.
-Current task: 2 (not started).
+Current task: 3 (not started).
 
 Scope: stability, bug fixes and MV3 lifecycle correctness only. No new features,
 no UI changes, no stylistic refactors. Working code is left alone.
@@ -22,7 +22,7 @@ no UI changes, no stylistic refactors. Working code is left alone.
     extension, `Alt+Shift+S` reads and toggles. Installs that already stored a
     custom binding may keep it until reset on `chrome://extensions/shortcuts`.
 
-- [ ] **2. Stop a read that never plays from leaving the active flag set**
+- [x] **2. Stop a read that never plays from leaving the active flag set**
   - Problem: `startReading` persists `active = true` before chunking. An empty
     or whitespace-only selection returns early without clearing it, and the
     offscreen-creation failure path clears it even when a newer run has already

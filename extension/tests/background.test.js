@@ -14,6 +14,7 @@ const env = {
   created: 0,
   fetch: null,
   listeners: {},
+  onOffscreenMessage: null,
 };
 
 globalThis.chrome = {
@@ -27,6 +28,7 @@ globalThis.chrome = {
     getContexts: async () => [{ contextType: 'OFFSCREEN_DOCUMENT' }],
     sendMessage: async (msg) => {
       env.offscreen.push(msg);
+      if (env.onOffscreenMessage) await env.onOffscreenMessage(msg);
     },
   },
   offscreen: {
@@ -65,6 +67,7 @@ function setup() {
   env.active = false;
   env.speed = 1;
   env.created = 0;
+  env.onOffscreenMessage = null;
   env.fetch = async () => {
     throw new Error('fetch was not stubbed');
   };
@@ -435,4 +438,42 @@ test('STOP during a speed != 1.0 read aborts it without playing', async () => {
   assert.deepStrictEqual(offscreenTypes(), ['STOP', 'STOP']);
   assert.strictEqual(pcmChunks().length, 0);
   await waitFor(() => env.active === false);
+});
+
+test('an empty selection does not leave the active flag set', async () => {
+  setup();
+
+  await bg.__test.startReading('   ', 7);
+
+  assert.deepStrictEqual(env.toasts.map((msg) => msg.text), ['Select some text first']);
+  assert.strictEqual(env.active, false);
+});
+
+test('a superseded failed read cannot clear the newer read flag', async () => {
+  setup();
+  let failFetch;
+  env.fetch = () =>
+    new Promise((resolve, reject) => {
+      failFetch = reject;
+    });
+
+  const first = bg.__test.startReading('First read.', 7);
+  await waitFor(() => failFetch != null);
+
+  // The second read starts while the first is reporting its failure: the first
+  // awaits the STOP message, which is the window where a newer run can slip in.
+  env.fetch = async () => streamBody(chunkRecord(0, 'AAAA') + '{"type":"done"}\n');
+  let second = null;
+  env.onOffscreenMessage = (msg) => {
+    if (msg.type === 'STOP' && !second) {
+      second = bg.__test.startReading('Second read.', 7);
+      return second;
+    }
+  };
+
+  failFetch(new TypeError('fetch failed'));
+  await first;
+  await second;
+
+  assert.strictEqual(env.active, true, 'the newer read still owns the flag');
 });
