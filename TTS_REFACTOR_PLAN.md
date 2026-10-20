@@ -1,7 +1,7 @@
 # TTS Refactor Plan
 
 Status: approved, executing.
-Current task: 3 (not started).
+Current task: 4 (not started).
 
 Scope: stability, bug fixes and MV3 lifecycle correctness only. No new features,
 no UI changes, no stylistic refactors. Working code is left alone.
@@ -33,7 +33,7 @@ no UI changes, no stylistic refactors. Working code is left alone.
   - Verify: empty selection leaves `active` false; a superseded run cannot clear
     a newer run's flag; the existing suite still passes.
 
-- [ ] **3. Restore the persisted active flag before the hotkey decides to toggle**
+- [x] **3. Restore the persisted active flag before the hotkey decides to toggle**
   - Problem: the service worker is terminated during long playback. On wake,
     `restoreActive()` runs without being awaited, so a hotkey press can see
     `active = false` and start a new read instead of stopping the one playing.

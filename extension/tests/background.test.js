@@ -46,12 +46,19 @@ globalThis.chrome = {
     },
   },
   tabs: {
+    query: async () => [{ id: 7 }],
     sendMessage: async (tabId, msg) => {
       env.toasts.push(msg);
     },
   },
   contextMenus: { onClicked: { addListener: () => {} } },
-  commands: { onCommand: { addListener: () => {} } },
+  commands: {
+    onCommand: {
+      addListener: (fn) => {
+        env.listeners.command = fn;
+      },
+    },
+  },
 };
 
 globalThis.fetch = (url, init) => env.fetch(url, init);
@@ -476,4 +483,21 @@ test('a superseded failed read cannot clear the newer read flag', async () => {
   await second;
 
   assert.strictEqual(env.active, true, 'the newer read still owns the flag');
+});
+
+test('the hotkey stops a read restored from storage', async () => {
+  setup();
+  // Re-evaluate the module to simulate a service worker restart: the new
+  // instance starts with empty in-memory state, while the persisted flag says
+  // a read is still playing.
+  env.active = true;
+  await import('../background.js?restart=1');
+  env.offscreen.length = 0;
+  env.toasts.length = 0;
+
+  await env.listeners.command('read-selection');
+
+  assert.deepStrictEqual(offscreenTypes(), ['STOP']);
+  await waitFor(() => env.active === false);
+  assert.deepStrictEqual(env.toasts, [], 'no new read was started');
 });

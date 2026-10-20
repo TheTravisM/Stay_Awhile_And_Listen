@@ -444,8 +444,6 @@ async function readSelection(tabId) {
   }
 }
 
-restoreActive();
-
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "cain-read",
@@ -475,6 +473,10 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
 chrome.commands.onCommand.addListener(async (command) => {
   if (command !== "read-selection") return;
+
+  // The worker may have been asleep while audio played, so the persisted flag,
+  // not the in-memory cache, decides whether this press starts or stops.
+  await restoreActive();
 
   // Toggle: if a read is in progress, stop it; otherwise read the selection.
   if (active) {
